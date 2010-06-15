@@ -68,6 +68,7 @@ class MainPage(webapp.RequestHandler):
 
         path = os.path.join(os.path.dirname(__file__), 'chat.html')
         self.response.out.write(template.render(path, template_values))
+        my_logger.debug("<--------------- MainPage get -------------->")
 
 def echo(data):
     return data
@@ -77,13 +78,19 @@ def echo(data):
 UTC_OFFSET = 9
 
 def loadMessages():
-    chats = db.GqlQuery("SELECT * FROM ChatMsg ORDER BY date ASC LIMIT 10")
+    #chats = db.GqlQuery("SELECT * FROM ChatMsg ORDER BY date ASC LIMIT 10")
+    query = ChatMsg.gql("ORDER BY date ASC")
+    numEntries = query.count()
+    offset = numEntries - 100 if (numEntries - 100) > 0 else 0
+    #query = db.GqlQuery("SELECT * FROM ChatMsg ORDER BY date ASC LIMIT " + (numEntries-100) + ", 100")
+    #chats = ChatMsg.gql("LIMIT :1, 100", numEntries - 100)
+    chats = query.fetch(100, offset)
     
-    my_logger.debug("<--GQL here-->")
+    my_logger.debug("<--------------- loadMessages -------------->")
     result = []
     for chat in chats:
         author = chat.author.nickname() if chat.author else "Unknown"
-        hour = chat.date.hour + UTC_OFFSET
+        hour = (chat.date.hour + UTC_OFFSET) % 24
         day =  chat.date.day + int(hour / 24)
         msgTime = str(hour) + chat.date.strftime(":%M %m/") + str(day)
         #my_logger.debug("date=" + msgTime + " author=" + author)
@@ -93,6 +100,7 @@ def loadMessages():
     return result
 
 def saveMessage(msg):
+    my_logger.debug("<--------------- saveMessages -------------->")
     chatMsg = ChatMsg()
 
     if users.get_current_user():
@@ -102,49 +110,8 @@ def saveMessage(msg):
 
     chatMsg.msg = msg
     chatMsg.put()
-    #chats = db.GqlQuery("SELECT * FROM ChatMsg ORDER BY date DESC LIMIT 10")
     
     return loadMessages()
-
-class Greeting(db.Model):
-    author = db.UserProperty()
-    content = db.StringProperty(multiline=True)
-    date = db.DateTimeProperty(auto_now_add=True)
-
-class HelloWorld(webapp.RequestHandler):
-    def get(self):
-        greetings_query = Greeting.all().order('-date')
-        greetings = greetings_query.fetch(10)
-
-        if users.get_current_user():
-            url = users.create_logout_url(self.request.uri)
-            url_linktext = 'Logout'
-        else:
-            url = users.create_login_url(self.request.uri)
-            url_linktext = 'Login'
-
-        template_values = {
-            'greetings': greetings,
-            'url': url,
-            'url_linktext': url_linktext,
-            }
-
-        path = os.path.join(os.path.dirname(__file__), 'index.html')
-        self.response.out.write(template.render(path, template_values))
-
-class Guestbook(webapp.RequestHandler):
-    def post(self):
-        greeting = Greeting()
-
-        if users.get_current_user():
-            greeting.author = users.get_current_user()
-
-        greeting.content = self.request.get('content')
-        greeting.put()
-        self.response.out.write("uh")
-        self.redirect('/helloworld')
-
-
 
 def main():
     debug_enabled = True
@@ -161,7 +128,7 @@ def main():
     pyamf.DEFAULT_ENCODING = pyamf.AMF3
     gateway = WebAppGateway(services, logger=logging, debug=debug_enabled)
 
-    application_paths = [('/', gateway), ('/chat', MainPage), ('/helloworld', HelloWorld), ('/sign/', Guestbook)]
+    application_paths = [('/', gateway), ('/chat', MainPage)]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
     run_wsgi_app(application)

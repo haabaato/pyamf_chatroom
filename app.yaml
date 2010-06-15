@@ -4,19 +4,16 @@ runtime: python
 api_version: 1
 
 handlers:
-- url: .*
+#- url: .*
+#  script: main.py
+- url: /
   script: main.py
-- url: /chat\.html
+- url: /chat
   script: main.py
-  #static_files: chat\.html
-  #upload: chat\.html
 - url: /swf
   static_dir: swf
 - url: /js
   static_dir: js
-- url: /js/(.*)
-  static_files: js/\1
-  upload: js/(.*)
 - url: /favicon.ico
   static_files: static/images/favicon.ico
   upload: static/images/favicon.ico
