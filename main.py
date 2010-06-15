@@ -16,6 +16,7 @@
 #
 import datetime
 #import json
+import os
 
 import logging
 my_logger = logging.getLogger('mylogger')
@@ -24,6 +25,7 @@ from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 from google.appengine.api import users
 from google.appengine.ext import db
+from google.appengine.ext.webapp import template
 
 import pyamf
 from pyamf.remoting.gateway.google import WebAppGateway
@@ -50,27 +52,25 @@ class MainPage(webapp.RequestHandler):
     def get(self):
         user = users.get_current_user()
 
-        if user:
-            self.response.headers['Content-Type'] = 'text/plain'
-            self.response.out.write('Hello, ' + user.nickname())
-        else:
+        if user is None:
             self.redirect(users.create_login_url(self.request.uri))
 
+        self.response.headers['Content-Type'] = 'text/html'
         chatMsg = ChatMsg()
 
-        if users.get_current_user():
-            chatMsg.author = users.get_current_user()
+        chatMsg.author = user
 
-            chatMsg.msg = chatMsg.author.nickname() + " logged in at " + datetime.datetime.now().ctime()
-            chatMsg.put()
-            self.redirect('/chat.html')
-        
-        
+        chatMsg.msg = chatMsg.author.nickname() + " logged in at " + datetime.datetime.now().ctime()
+        chatMsg.put()
 
+        template_values = {
+            }
+
+        path = os.path.join(os.path.dirname(__file__), 'chat.html')
+        self.response.out.write(template.render(path, template_values))
 
 def echo(data):
     return data
-
 
 ### Chat services
 
@@ -86,8 +86,7 @@ def loadMessages():
         hour = chat.date.hour + UTC_OFFSET
         day =  chat.date.day + int(hour / 24)
         msgTime = str(hour) + chat.date.strftime(":%M %m/") + str(day)
-
-        my_logger.debug("date=" + msgTime + " author=" + author)
+        #my_logger.debug("date=" + msgTime + " author=" + author)
         chatMsgFlash = ChatMsgFlash(author, msgTime, chat.msg)
         result.append(chatMsgFlash) 
 
@@ -107,12 +106,51 @@ def saveMessage(msg):
     
     return loadMessages()
 
+class Greeting(db.Model):
+    author = db.UserProperty()
+    content = db.StringProperty(multiline=True)
+    date = db.DateTimeProperty(auto_now_add=True)
+
+class HelloWorld(webapp.RequestHandler):
+    def get(self):
+        greetings_query = Greeting.all().order('-date')
+        greetings = greetings_query.fetch(10)
+
+        if users.get_current_user():
+            url = users.create_logout_url(self.request.uri)
+            url_linktext = 'Logout'
+        else:
+            url = users.create_login_url(self.request.uri)
+            url_linktext = 'Login'
+
+        template_values = {
+            'greetings': greetings,
+            'url': url,
+            'url_linktext': url_linktext,
+            }
+
+        path = os.path.join(os.path.dirname(__file__), 'index.html')
+        self.response.out.write(template.render(path, template_values))
+
+class Guestbook(webapp.RequestHandler):
+    def post(self):
+        greeting = Greeting()
+
+        if users.get_current_user():
+            greeting.author = users.get_current_user()
+
+        greeting.content = self.request.get('content')
+        greeting.put()
+        self.response.out.write("uh")
+        self.redirect('/helloworld')
+
+
 
 def main():
     debug_enabled = True
     LOG_FILENAME = 'logging_example.out'
     logging.basicConfig(filename=LOG_FILENAME, filemode="w", level=logging.DEBUG)
-    my_logger.setLevel(logging.DEBUG)
+    #my_logger.setLevel(logging.DEBUG)
 
     services = {
         'myservice.echo': echo,
@@ -123,7 +161,7 @@ def main():
     pyamf.DEFAULT_ENCODING = pyamf.AMF3
     gateway = WebAppGateway(services, logger=logging, debug=debug_enabled)
 
-    application_paths = [('/', gateway), ('/chat', MainPage)]
+    application_paths = [('/', gateway), ('/chat', MainPage), ('/helloworld', HelloWorld), ('/sign/', Guestbook)]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
     run_wsgi_app(application)
