@@ -1,0 +1,12 @@
+application: haabaablog
+version: 1
+runtime: python
+api_version: 1
+
+handlers:
+- url: .*
+  script: main.py
+- url: /chat\.html
+  static_files: chat\.html
+  upload: chat\.html
+
