@@ -70,21 +70,38 @@ class MainPage(webapp.RequestHandler):
         self.response.out.write(template.render(path, template_values))
         my_logger.debug("<--------------- MainPage get -------------->")
 
+
+class LoginPage(webapp.RequestHandler):
+    def get(self):
+        if users.get_current_user():
+            url = users.create_logout_url(self.request.uri)
+            url_linktext = 'Logout'
+        else:
+            url = users.create_login_url(self.request.uri)
+            url_linktext = 'Login'
+        
+        self.response.out.write("<a href=" + url + ">" + url_linktext + "</a>")
+
+
+### Chat services (PyAMF)
+
 def echo(data):
     return data
-
-### Chat services
 
 UTC_OFFSET = 9
 
 def loadMessages():
     #chats = db.GqlQuery("SELECT * FROM ChatMsg ORDER BY date ASC LIMIT 10")
-    query = ChatMsg.gql("ORDER BY date ASC")
-    numEntries = query.count()
-    offset = numEntries - 100 if (numEntries - 100) > 0 else 0
-    #query = db.GqlQuery("SELECT * FROM ChatMsg ORDER BY date ASC LIMIT " + (numEntries-100) + ", 100")
-    #chats = ChatMsg.gql("LIMIT :1, 100", numEntries - 100)
-    chats = query.fetch(100, offset)
+
+    #query = ChatMsg.gql("ORDER BY date ASC")
+    #numEntries = query.count()
+    #offset = numEntries - 100 if (numEntries - 100) > 0 else 0
+    #chats = query.fetch(100, offset)
+
+
+    HISTORYSIZE = 100
+    chats = ChatMsg.all().order("-date").fetch(HISTORYSIZE)
+    chats.reverse()
     
     my_logger.debug("<--------------- loadMessages -------------->")
     result = []
@@ -128,7 +145,11 @@ def main():
     pyamf.DEFAULT_ENCODING = pyamf.AMF3
     gateway = WebAppGateway(services, logger=logging, debug=debug_enabled)
 
-    application_paths = [('/', gateway), ('/chat', MainPage)]
+    application_paths = [
+        ('/', gateway), 
+        ('/chat', MainPage),
+        ('/login', LoginPage)
+        ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
     run_wsgi_app(application)
