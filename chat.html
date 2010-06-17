@@ -9,7 +9,12 @@
 	
 	<script src="js/swfobject.js" type="text/javascript"></script>
 	<script type="text/javascript">
+        var domain = document.location.href
+        //var domain = "http://haabaablog.appspot.com/chat"
+        domain = domain.replace(/^(https?:\/\/.+\/)\w*$/, "$1")
+
 		var flashvars = {
+            url: domain
 		};
 		var params = {
 			menu: "false",

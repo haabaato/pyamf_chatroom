@@ -17,6 +17,7 @@
 import datetime
 #import json
 import os
+import re
 
 import logging
 my_logger = logging.getLogger('mylogger')
@@ -54,21 +55,21 @@ class MainPage(webapp.RequestHandler):
 
         if user is None:
             self.redirect(users.create_login_url(self.request.uri))
+        else:
+            self.response.headers['Content-Type'] = 'text/html'
+            chatMsg = ChatMsg()
 
-        self.response.headers['Content-Type'] = 'text/html'
-        chatMsg = ChatMsg()
+            chatMsg.author = user
 
-        chatMsg.author = user
+            chatMsg.msg = chatMsg.author.nickname() + " logged in at " + datetime.datetime.now().ctime()
+            chatMsg.put()
 
-        chatMsg.msg = chatMsg.author.nickname() + " logged in at " + datetime.datetime.now().ctime()
-        chatMsg.put()
+            template_values = {
+                }
 
-        template_values = {
-            }
-
-        path = os.path.join(os.path.dirname(__file__), 'chat.html')
-        self.response.out.write(template.render(path, template_values))
-        my_logger.debug("<--------------- MainPage get -------------->")
+            path = os.path.join(os.path.dirname(__file__), 'chat.html')
+            self.response.out.write(template.render(path, template_values))
+            my_logger.debug("<--------------- MainPage get -------------->")
 
 
 class LoginPage(webapp.RequestHandler):
@@ -125,7 +126,9 @@ def saveMessage(msg):
     else:
         chatMsg.author = users.User("Unknown@sshole.com")
 
-    chatMsg.msg = msg
+    chatMsg.msg = re.sub(r'(https?:\/\/[0-9a-z_,.:;&=+*%$#!?@()~\'\/-]+)',
+                         r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
+                         msg)
     chatMsg.put()
     
     return loadMessages()
