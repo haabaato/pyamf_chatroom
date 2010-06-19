@@ -18,9 +18,10 @@ from django.utils import simplejson
 import pyamf
 from pyamf.remoting.gateway.google import WebAppGateway
 
+### For Japanese support
+# -*- coding: utf-8 -*- 
 ## Constants
-UTC_OFFSET = 9 # For Japan
-
+UTC_OFFSET = 9 
 
 class ChatMsg(db.Model):
     id = db.IntegerProperty()
@@ -69,9 +70,7 @@ class MainPage(webapp.RequestHandler):
             self.response.headers['Content-Type'] = 'text/html'
 
             localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-#            msg = unicode(users.get_current_user().nickname() + " logged in at " + localtime.ctime() + '. ハッロ！', \
-#                    'utf-8')
-            msg = users.get_current_user().nickname() + " logged in at " + localtime.ctime() + unicode('. ハッロ！', 'utf-8')
+            msg = users.get_current_user().nickname() + " logged in at " + localtime.ctime() + ". Irasshaimase biatch!"
 
             ChatMsg.createChatMsg(msg)
 
@@ -216,10 +215,7 @@ class RPCMethods:
         if args[0] == "logout":
 
             localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            #msg = unicode(users.get_current_user().nickname() + " logged out at " + localtime.ctime() + u'. バイバイ!', \
-            #        'utf-8')
-
-            msg = users.get_current_user().nickname() + " logged out at " + localtime.ctime() + unicode('. バイバイ!', 'utf-8')
+            msg = users.get_current_user().nickname() + " logged out at " + localtime.ctime() + '. Later hater!'
             ChatMsg.createChatMsg(msg)
         else:
             return args[0]

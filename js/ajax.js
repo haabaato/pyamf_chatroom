@@ -150,8 +150,6 @@ $(window).blur(function(e) {
 
 $(window).focus(function(e) {
 	document.title = defaultTitle;
-	console.log("timeoutID=" + timeoutID)
-	console.log("document.title=" + document.title)
 	clearInterval(timeoutID);
 	timeoutID = null
 	hasWindowFocus = true;
