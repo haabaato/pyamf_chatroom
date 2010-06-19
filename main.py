@@ -69,8 +69,10 @@ class MainPage(webapp.RequestHandler):
             self.response.headers['Content-Type'] = 'text/html'
 
             localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = unicode(users.get_current_user().nickname() + " logged in at " + localtime.ctime() + ". ハッロ！", \
-                    'utf-8')
+#            msg = unicode(users.get_current_user().nickname() + " logged in at " + localtime.ctime() + '. ハッロ！', \
+#                    'utf-8')
+            msg = users.get_current_user().nickname() + " logged in at " + localtime.ctime() + unicode('. ハッロ！', 'utf-8')
+
             ChatMsg.createChatMsg(msg)
 
             template_values = {
@@ -109,15 +111,14 @@ def loadMessages(latestMsgID = 0):
         if recentChats is None:
             recentChats = ChatMsg.all().order("-date").fetch(HISTORYSIZE)
             logging.debug("recentChats" + str(len(recentChats)))
-            #if recentChats is None:
             if len(recentChats) == 0:
                 chats = recentChats = []
             else:
                 recentChats.reverse()
-                latestMsgID = recentChats[-1].id
                 memcache.add("recentChats", recentChats, 60*60) 
         # Check that recentChats is not empty
         if len(recentChats):
+            latestMsgID = recentChats[-1].id
             newChats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
             recentChats.extend(newChats)
             chats = recentChats
@@ -215,8 +216,10 @@ class RPCMethods:
         if args[0] == "logout":
 
             localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = unicode(users.get_current_user().nickname() + " logged out at " + localtime.ctime() + ". バイバイ!", \
-                    'utf-8')
+            #msg = unicode(users.get_current_user().nickname() + " logged out at " + localtime.ctime() + u'. バイバイ!', \
+            #        'utf-8')
+
+            msg = users.get_current_user().nickname() + " logged out at " + localtime.ctime() + unicode('. バイバイ!', 'utf-8')
             ChatMsg.createChatMsg(msg)
         else:
             return args[0]
