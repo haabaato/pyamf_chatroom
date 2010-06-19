@@ -1,5 +1,4 @@
 cron:
 - description: db maintenance 
   url: /tasks/purge
-  schedule: every 24 hours
-  timezone: Asia/Tokyo
+  schedule: every day 00:00

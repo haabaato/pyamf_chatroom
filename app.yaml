@@ -20,7 +20,13 @@ handlers:
 - url: /tasks/purge
   script: dbpurge.py
   login: admin
+
 # Debug - DELETE LATER
 - url: /login
   script: main.py
 
+- url: /admin/.*
+  script: $PYTHON_LIB/google/appengine/ext/admin
+  login: admin
+- url: /.*
+  script: main.py
