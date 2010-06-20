@@ -6,6 +6,8 @@ from google.appengine.ext.webapp.util import run_wsgi_app
 from google.appengine.api import users
 from google.appengine.ext import db
 
+from models.chatroom import * 
+
 class DbPurgeTask(webapp.RequestHandler):
     def get(self):
         now = datetime.datetime.now()

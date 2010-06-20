@@ -1,6 +1,5 @@
 import datetime
 from datetime import timedelta
-#import json
 import os
 import re
 
@@ -18,39 +17,33 @@ from django.utils import simplejson
 import pyamf
 from pyamf.remoting.gateway.google import WebAppGateway
 
+#import json
+#import simplejson as json
+
+import sys
+# Force sys.path to have our own directory first, so we can import from it.
+APP_ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, APP_ROOT_DIR)
+sys.path.insert(1, os.path.join(APP_ROOT_DIR, 'utils/external'))
+sys.path.insert(2, os.path.join(APP_ROOT_DIR, 'utils/external/firepython'))
+sys.path.insert(2, os.path.join(APP_ROOT_DIR, 'utils/external/simplejson'))
+from firepython.middleware import FirePythonWSGI
+
 ### For Japanese support
 # -*- coding: utf-8 -*- 
 ## Constants
 UTC_OFFSET = 9 
 
-class ChatMsg(db.Model):
-    id = db.IntegerProperty()
-    author = db.UserProperty()
-    msg = db.StringProperty(multiline=True)
-    date = db.DateTimeProperty(auto_now_add=True)
+### Model classes
+from models.chatroom import * 
 
-    @classmethod
-    def createChatMsg(self, msg):
-        chatMsg = ChatMsg()
-        
-        user = users.get_current_user()
-        chatMsg.author = user if user else users.User("Unknown")
-        chatMsg.msg = msg
-
-        # Get the ID of the latest message
-        latestChat = ChatMsg.all().order("-id").get()
-        latestID = latestChat.id if latestChat else 0
-        chatMsg.id = latestID + 1
-        chatMsg.put()    
-
-        return chatMsg
-
+# Objects of this class, based on ChatMsg model, are sent to Flash app
 class ChatMsgFlash(object):
     """
     Models information associated with a simple chat message object.
     """
     # we need a default constructor (e.g. a paren-paren constructor)
-    def __init__(self, id=None, author=None, date=None, msg=None):
+    def __init__(self, id=None, author=None, date=None, msg=None, callback=None):
         """
         Create an instance of a chat message object.
         """
@@ -58,6 +51,9 @@ class ChatMsgFlash(object):
         self.author = author
         self.date = date
         self.msg = msg
+        self.callback = callback
+
+### Request handlers
 
 class MainPage(webapp.RequestHandler):
     def get(self):
@@ -69,10 +65,16 @@ class MainPage(webapp.RequestHandler):
         else:
             self.response.headers['Content-Type'] = 'text/html'
 
+            currentUser = users.get_current_user()
             localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = users.get_current_user().nickname() + " logged in at " + localtime.ctime() + ". Irasshaimase biatch!"
-
-            ChatMsg.createChatMsg(msg)
+            #msg = users.get_current_user().nickname() + " logged in at " + localtime.ctime() + ". Irasshaimase biatch!"
+            msg = currentUser.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b, %d, %Y") + ". Irasshaimase biatch!"
+            # Create new login message
+            chatMsg = ChatMsg.createChatMsg(msg, "chat.getUsers")
+            # Add to list of users
+            #newUser = CurrentUsers()
+            #newUser.put()
+            CurrentUsers.addUser()
 
             template_values = {
                 }
@@ -126,20 +128,20 @@ def loadMessages(latestMsgID = 0):
         chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
     result = []
-    for chat in chats:
-        id = chat.id
-        author = chat.author.nickname() if chat.author else "Unknown"
-        hour = (chat.date.hour + UTC_OFFSET) % 24
-        day =  chat.date.day + int(hour / 24)
-        msgTime = str(hour) + chat.date.strftime(":%M %m/") + str(day)
-        chatMsgFlash = ChatMsgFlash(id, author, msgTime, chat.msg)
-        result.append(chatMsgFlash) 
+#    for chat in chats:
+#        localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
+#        msgTime = localtime.strftime("%H:%M %m/%d")
+#        chatMsgFlash = ChatMsgFlash(chat.id, chat.author.nickname(), msgTime, chat.msg, chat.callback)
+#        #result.append(chatMsgFlash) 
+        #result.append(json.dumps(to_dict(chat))) 
+        
+    chats = [to_dict(chat) for chat in chats]
 
     stats = memcache.get_stats()
     logging.debug("Cache hits: " + str(stats['hits']))
     logging.debug("Cache misses: " + str(stats['misses']))
 
-    return result
+    return chats
 
 def saveMessage(msg):
     logging.debug("<--------------- saveMessages -------------->")
@@ -153,6 +155,13 @@ def saveMessage(msg):
     latestID = latestChat.id - 1 if latestChat.id else 0
 
     return loadMessages(latestID)
+
+def getUsers():
+    logging.debug("<-------------- getUsers --------------->")
+    userList = CurrentUsers.all().fetch(1000)
+    logging.debug(userList)
+
+    return [currentUser.user.nickname() for currentUser in userList]
 
 
 ### RPC methods
@@ -215,8 +224,12 @@ class RPCMethods:
         if args[0] == "logout":
 
             localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = users.get_current_user().nickname() + " logged out at " + localtime.ctime() + '. Later hater!'
-            ChatMsg.createChatMsg(msg)
+            msg = users.get_current_user().nickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + '. Later hater!'
+            # Create logout message
+            ChatMsg.createChatMsg(msg, "chat.getUsers")
+            # Remove user from list of current users
+            CurrentUsers.delUser()
+
         else:
             return args[0]
         return
@@ -237,6 +250,7 @@ def main():
         'myservice.echo': echo,
         'chat.loadMessages': loadMessages,
         'chat.saveMessage': saveMessage,
+        'chat.getUsers': getUsers
     }
 
     pyamf.DEFAULT_ENCODING = pyamf.AMF3
@@ -250,8 +264,8 @@ def main():
         ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
-    run_wsgi_app(application)
-    #run_wsgi_app(FirePythonWSGI(application))
+    #run_wsgi_app(application)
+    run_wsgi_app(FirePythonWSGI(application))
 
 
 if __name__ == '__main__':

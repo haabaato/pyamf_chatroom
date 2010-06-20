@@ -1,0 +1,3 @@
+[submodule "firepython"]
+	path = firepython
+	url = /Users/herbert/Dropbox/Programming/blogs/pyamf_chatroom/utils/external/firepython/
