@@ -102,7 +102,6 @@ def echo(data):
 
 def loadMessages(latestMsgID = 0):
     logging.debug("<--------------- loadMessages -------------->")
-    logging.debug(str(latestMsgID))
 
     HISTORYSIZE = 1000
     if latestMsgID == 0:
@@ -111,7 +110,6 @@ def loadMessages(latestMsgID = 0):
         # Query db for most recent messages and store in memcache
         if recentChats is None:
             recentChats = ChatMsg.all().order("-date").fetch(HISTORYSIZE)
-            logging.debug("recentChats" + str(len(recentChats)))
             if len(recentChats) == 0:
                 chats = recentChats = []
             else:
@@ -127,14 +125,6 @@ def loadMessages(latestMsgID = 0):
         # Only return the most recent chats
         chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
-    result = []
-#    for chat in chats:
-#        localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-#        msgTime = localtime.strftime("%H:%M %m/%d")
-#        chatMsgFlash = ChatMsgFlash(chat.id, chat.author.nickname(), msgTime, chat.msg, chat.callback)
-#        #result.append(chatMsgFlash) 
-        #result.append(json.dumps(to_dict(chat))) 
-        
     chats = [to_dict(chat) for chat in chats]
 
     stats = memcache.get_stats()
