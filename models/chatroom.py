@@ -69,6 +69,7 @@ class CurrentUsers(db.Model):
     """
     user = db.UserProperty()
     date = db.DateTimeProperty(auto_now_add=True)
+    loginCount = db.IntegerProperty(default=1)
 
     @classmethod
     def addUser(self):
@@ -83,6 +84,8 @@ class CurrentUsers(db.Model):
             newUser.put()
         else:
             logging.debug("User already exists, not adding")
+            user.loginCount += 1
+            user.put()
 
     @classmethod
     def delUser(self):
@@ -93,7 +96,12 @@ class CurrentUsers(db.Model):
         logging.debug("User deleted")
         logging.debug(user)
         if user:
-            db.delete(user)
+            if user.loginCount == 1:
+                db.delete(user)
+            else:
+                user.loginCount -= 1
+                user.put()
+
          
 
 class UserPrefs(db.Model):

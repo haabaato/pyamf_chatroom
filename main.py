@@ -148,6 +148,9 @@ def saveMessage(msg):
 
 def getUsers():
     logging.debug("<-------------- getUsers --------------->")
+
+    # Delete users who haven't responded typed in over an hour
+
     userList = CurrentUsers.all().fetch(1000)
     logging.debug(userList)
 
