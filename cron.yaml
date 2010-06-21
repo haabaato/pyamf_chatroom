@@ -2,3 +2,6 @@ cron:
 - description: db maintenance 
   url: /tasks/purge
   schedule: every day 00:00
+- description: user list refreshing
+  url: /tasks/refreshUsers
+  schedule: every 2 minutes

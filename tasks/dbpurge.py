@@ -15,12 +15,27 @@ class DbPurgeTask(webapp.RequestHandler):
         q = db.GqlQuery("SELECT * FROM ChatMsg WHERE date < :1", pastDay)
         results = q.fetch(1000)
         db.delete(results)
-        self.response.out.write("Deleted all messages before " + pastDay.ctime())
+
+        self.response.headers['Content-Type'] = 'text/html'
+        #self.response.out.write('<input type="button" value="Purge 2 days" onclick="doAdd()" style="width:100%" /><br />') 
+
+        self.response.out.write("Deleted all messages before %s" % pastDay)
+
+class DbPurgeAllTask(webapp.RequestHandler):
+    def get(self):
+        results = ChatMsg.all().fetch(1000)
+        db.delete(results)
+
+        self.response.headers['Content-Type'] = 'text/html'
+        self.response.out.write("Deleted all messages.")
 
 def main():
     debug_enabled = True
 
-    application_paths = [('/tasks/purge', DbPurgeTask)]
+    application_paths = [
+        ('/tasks/purge', DbPurgeTask),
+        ('/tasks/purgeall', DbPurgeAllTask)
+    ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
     run_wsgi_app(application)

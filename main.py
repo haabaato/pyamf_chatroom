@@ -17,9 +17,6 @@ from django.utils import simplejson
 import pyamf
 from pyamf.remoting.gateway.google import WebAppGateway
 
-#import json
-#import simplejson as json
-
 import sys
 # Force sys.path to have our own directory first, so we can import from it.
 APP_ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -29,29 +26,18 @@ sys.path.insert(2, os.path.join(APP_ROOT_DIR, 'utils/external/firepython'))
 sys.path.insert(2, os.path.join(APP_ROOT_DIR, 'utils/external/simplejson'))
 from firepython.middleware import FirePythonWSGI
 
+
+#import constants
+from constants import *
+
 ### For Japanese support
 # -*- coding: utf-8 -*- 
-## Constants
-UTC_OFFSET = 9 
+
 
 ### Model classes
 from models.chatroom import * 
-
-# Objects of this class, based on ChatMsg model, are sent to Flash app
-class ChatMsgFlash(object):
-    """
-    Models information associated with a simple chat message object.
-    """
-    # we need a default constructor (e.g. a paren-paren constructor)
-    def __init__(self, id=None, author=None, date=None, msg=None, callback=None):
-        """
-        Create an instance of a chat message object.
-        """
-        self.id = id
-        self.author = author
-        self.date = date
-        self.msg = msg
-        self.callback = callback
+### Handlers
+from handlers import rpc
 
 ### Request handlers
 
@@ -65,16 +51,15 @@ class MainPage(webapp.RequestHandler):
         else:
             self.response.headers['Content-Type'] = 'text/html'
 
-            currentUser = users.get_current_user()
-            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            #msg = users.get_current_user().nickname() + " logged in at " + localtime.ctime() + ". Irasshaimase biatch!"
-            msg = currentUser.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b, %d, %Y") + ". Irasshaimase biatch!"
-            # Create new login message
-            chatMsg = ChatMsg.createChatMsg(msg, "chat.getUsers")
             # Add to list of users
-            #newUser = CurrentUsers()
-            #newUser.put()
-            CurrentUsers.addUser()
+            result = CurrentUsers.addUser()
+            # If user isn't one of the current users, show login msg
+            if result:
+                currentUser = users.get_current_user()
+                localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
+                msg = currentUser.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b, %d, %Y") + ". Irasshaimase biatch!" + localtime.strftime("%c")
+                # Create new login message
+                chatMsg = ChatMsg.createChatMsg(msg, "chat.getUsers")
 
             template_values = {
                 }
@@ -133,106 +118,66 @@ def loadMessages(latestMsgID = 0):
 
     return chats
 
-def saveMessage(msg):
+def saveMessage(msg, latestMsgID):
     logging.debug("<--------------- saveMessages -------------->")
+
+    # Check if user hasn't been added to CurrentUsers yet
+    newUser = users.get_current_user()
+    # Check if user is already in list
+    user = CurrentUsers.all().filter("user = ", newUser).get()
+    if user is None:
+        logging.debug("adding new user in saveMessage")
+        CurrentUsers.addUser()
+        callback = "chat.getUsers"
+    else:
+        callback = None
 
     # Replace URLs with html code
     msg = re.sub(r'(https?:\/\/[0-9a-z_,.:;&=+*%$#!?@()~\'\/-]+)',
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  msg)
-    latestChat = ChatMsg.createChatMsg(msg)
+    #latestChat = ChatMsg.createChatMsg(msg, callback)
+    ChatMsg.createChatMsg(msg, callback)
     # Subtract 1 so this new message is retrieved as well
-    latestID = latestChat.id - 1 if latestChat.id else 0
+    #latestID = latestChat.id - 1 if latestChat.id else 0
 
-    return loadMessages(latestID)
+    return loadMessages(latestMsgID)
 
 def getUsers():
     logging.debug("<-------------- getUsers --------------->")
 
-    # Delete users who haven't responded typed in over an hour
+#    timeFrame = datetime.datetime.now() - timedelta(hours=2)
+#    # Get all current logged in users
+#    userList = CurrentUsers.all().fetch(1000)
+#    recentChats = ChatMsg.all().order("-date").filter("date > ", timeFrame).fetch(200)
+#    # See if each current user has commented in most recent messages
+#    if recentChats:
+#        # Delete users who haven't responded typed in over an hour
+#        for currentUser in userList:
+#            userChats = [chat for chat in recentChats if chat.user == currentUser.user]
+#            if len(userChats) == 0:
+#                logging.debug("user deleted b/c not in recentchats=%s", currentUser.user.nickname())
+#                db.delete(user)
+#                userList.remove(user)
+#            elif userChats[0].date > timeFrame:
+#                continue
+#            else:
+#                logging.debug("user deleted b/c inactive=%s", currentUser.user.nickname())
+#                db.delete(user)
+#                userList.remove(user)
 
+    # Insert current user if not already in db, then update time
+    #currentUser = CurrentUsers.get_or_insert(Key(encoded=users.get_current_user().email()))
+    currentUser = CurrentUsers.all().filter("user = ", users.get_current_user()).get()
+    if currentUser is None:
+        CurrentUsers.addUser()
+    else:
+        currentUser.date = datetime.datetime.now()
+        currentUser.put()
+    # Fetch all users
     userList = CurrentUsers.all().fetch(1000)
-    logging.debug(userList)
 
-    return [currentUser.user.nickname() for currentUser in userList]
-
-
-### RPC methods
-
-class RPCHandler(webapp.RequestHandler):
-    """ Allows the functions defined in the RPCMethods class to be RPCed."""
-    def __init__(self):
-        webapp.RequestHandler.__init__(self)
-        self.methods = RPCMethods()
-
-    def get(self):
-        logging.debug("RPC get called")
-        func = None
-
-        action = self.request.get('action')
-        if action:
-            if action[0] == '_':
-                self.error(403) # access denied
-                return
-            else:
-                func = getattr(self.methods, action, None)
-
-        if not func:
-            self.error(404) # file not found
-            return
-
-        args = ()
-        while True:
-            key = 'arg%d' % len(args)
-            val = self.request.get(key)
-            if val:
-                args += (simplejson.loads(val),)
-            else:
-                break
-        result = func(*args)
-        self.response.out.write(simplejson.dumps(result))
-    
-    def post(self):
-        logging.debug("RPC post called")
-        args = simplejson.loads(self.request.body)
-        func, args = args[0], args[1:]
-
-        if func[0] == '_':
-            self.error(403) # access denied
-            return
-
-        func = getattr(self.methods, func, None)
-        if not func:
-            self.error(404) # file not found
-            return
-
-        result = func(*args)
-        self.response.out.write(simplejson.dumps(result))
-
-class RPCMethods:
-    """ Defines the methods that can be RPCed.
-    NOTE: Do not allow remote callers access to private/protected "_*" methods.
-    """
-    def sendMsg(self, *args):
-        if args[0] == "logout":
-
-            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = users.get_current_user().nickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + '. Later hater!'
-            # Create logout message
-            ChatMsg.createChatMsg(msg, "chat.getUsers")
-            # Remove user from list of current users
-            CurrentUsers.delUser()
-
-        else:
-            return args[0]
-        return
-
-    def Add(self, *args):
-        # The JSON encoding may have encoded integers as strings.
-        # Be sure to convert args to any mandatory type(s).
-        ints = [int(arg) for arg in args]
-        return sum(ints)
- 
+    return [currentUser.user.nickname() for currentUser in userList if currentUser is not None]
 
 def main():
     debug_enabled = True
@@ -253,7 +198,7 @@ def main():
         ('/', gateway), 
         ('/chat', MainPage),
         ('/login', LoginPage),
-        ('/rpc', RPCHandler)
+        ('/rpc', rpc.RPCHandler)
         ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 

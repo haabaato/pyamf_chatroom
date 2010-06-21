@@ -156,8 +156,16 @@ $(window).focus(function(e) {
 });
 
 $(window).unload(function(e) {
+	console.log("unload event");
 	// Call AJAX function
 	doSendMsg("logout")
+});
+
+$(window).bind('beforeunload', 
+	function() {
+		console.log("beforeunl");
+		//return "Do you really want to leave my wonderful chatroom?  But...you mean so much to me.";
+		return;
 });
 
 

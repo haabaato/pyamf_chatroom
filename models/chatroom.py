@@ -4,6 +4,8 @@ from google.appengine.api import memcache
 from google.appengine.ext import db
 from google.appengine.api import users
 
+from google.appengine.ext.db import Key
+
 import datetime
 import time
 
@@ -39,7 +41,7 @@ def to_dict(model):
 
 class ChatMsg(db.Model):
     id = db.IntegerProperty()
-    author = db.UserProperty()
+    user = db.UserProperty()
     msg = db.StringProperty(multiline=True)
     date = db.DateTimeProperty(auto_now_add=True)
     callback = db.StringProperty()
@@ -49,7 +51,7 @@ class ChatMsg(db.Model):
         chatMsg = ChatMsg()
         
         user = users.get_current_user()
-        chatMsg.author = user if user else users.User("Unknown")
+        chatMsg.user = user if user else users.User("Unknown")
         chatMsg.msg = msg
 
         # If callback is set, Flash app will issue RPC to service named by callback
@@ -75,32 +77,45 @@ class CurrentUsers(db.Model):
     def addUser(self):
         """
         Create a new user and puts into CurrentUsers.
+        Returns true if user was added, false if not.
         """
+        currentUser = users.get_current_user()
         newUser = CurrentUsers()
-        newUser.user = users.get_current_user()
+        #newUser = CurrentUsers( key=Key(encoded=currentUser.email()) )
+        newUser.user = currentUser
         # Check if user is already in list
         user = CurrentUsers.all().filter("user = ", users.get_current_user()).get()
         if user is None:
             newUser.put()
+            wasAdded = True
         else:
             logging.debug("User already exists, not adding")
             user.loginCount += 1
             user.put()
+            wasAdded = False
+
+        return wasAdded
 
     @classmethod
     def delUser(self):
         """
         Deletes current user from CurrentUsers.
+        Returns true if user was deleted, false if not.
         """
         user = CurrentUsers.all().filter("user = ", users.get_current_user()).get()
-        logging.debug("User deleted")
-        logging.debug(user)
+        logging.debug("<------delUser = %s----->", user)
         if user:
             if user.loginCount == 1:
+                logging.debug("deleting user=%s", user.user.nickname())
                 db.delete(user)
+                wasDeleted = True
             else:
+                logging.debug("decrementing login count for user=%s", user.user.nickname())
                 user.loginCount -= 1
                 user.put()
+                wasDeleted = False
+
+            return wasDeleted
 
          
 
