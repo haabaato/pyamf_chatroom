@@ -15,6 +15,8 @@ class DbPurgeTask(webapp.RequestHandler):
         q = db.GqlQuery("SELECT * FROM ChatMsg WHERE date < :1", pastDay)
         results = q.fetch(1000)
         db.delete(results)
+        # clear memcache as well
+        memcache.delete("recentChats")
 
         self.response.headers['Content-Type'] = 'text/html'
         #self.response.out.write('<input type="button" value="Purge 2 days" onclick="doAdd()" style="width:100%" /><br />') 
@@ -25,6 +27,8 @@ class DbPurgeAllTask(webapp.RequestHandler):
     def get(self):
         results = ChatMsg.all().fetch(1000)
         db.delete(results)
+        # clear memcache as well
+        memcache.delete("recentChats")
 
         self.response.headers['Content-Type'] = 'text/html'
         self.response.out.write("Deleted all messages.")

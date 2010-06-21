@@ -17,7 +17,7 @@ handlers:
 - url: /favicon.ico
   static_files: static/images/favicon.ico
   upload: static/images/favicon.ico
-- url: /tasks/purge
+- url: /tasks/purge.*
   script: /tasks/dbpurge.py
   login: admin
 - url: /tasks/refreshUsers
