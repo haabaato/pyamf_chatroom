@@ -19,7 +19,6 @@ class DbPurgeTask(webapp.RequestHandler):
         memcache.delete("recentChats")
 
         self.response.headers['Content-Type'] = 'text/html'
-        #self.response.out.write('<input type="button" value="Purge 2 days" onclick="doAdd()" style="width:100%" /><br />') 
 
         self.response.out.write("Deleted all messages before %s" % pastDay)
 

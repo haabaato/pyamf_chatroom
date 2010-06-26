@@ -14,9 +14,15 @@ handlers:
   static_dir: swf
 - url: /js
   static_dir: js
-- url: /favicon.ico
-  static_files: static/images/favicon.ico
-  upload: static/images/favicon.ico
+# Images
+#- url: /favicon.ico
+#  static_files: static/images/favicon.ico
+#  upload: static/images/favicon.ico
+- url: /(.*).ico
+  static_files: static/images/\1.ico
+  upload: static/images/(.*).ico
+
+# Tasks
 - url: /tasks/purge.*
   script: /tasks/dbpurge.py
   login: admin

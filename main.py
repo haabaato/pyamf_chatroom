@@ -37,7 +37,7 @@ from constants import *
 ### Model classes
 from models.chatroom import * 
 ### Handlers
-from handlers import rpc
+from handlers import rpc, chatroom
 
 ### Request handlers
 
@@ -57,7 +57,7 @@ class MainPage(webapp.RequestHandler):
             if result:
                 currentUser = users.get_current_user()
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-                msg = currentUser.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b, %d, %Y") + ". Irasshaimase biatch!" + localtime.strftime("%c")
+                msg = currentUser.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + ". Irasshaimase biatch!"
                 # Create new login message
                 chatMsg = ChatMsg.createChatMsg(msg, "chat.getUsers")
 
@@ -79,116 +79,17 @@ class LoginPage(webapp.RequestHandler):
         
         self.response.out.write("<a href=" + url + ">" + url_linktext + "</a>")
 
-### Chat services (PyAMF)
-
-def echo(data):
-    return data
-
-
-def loadMessages(latestMsgID = 0):
-    logging.debug("<--------------- loadMessages -------------->")
-
-    HISTORYSIZE = 1000
-    if latestMsgID == 0:
-        # User has just logged in, so send them all the chats
-        recentChats = memcache.get("recentChats")
-        # Query db for most recent messages and store in memcache
-        if recentChats is None:
-            recentChats = ChatMsg.all().order("-date").fetch(HISTORYSIZE)
-            if len(recentChats) == 0:
-                chats = recentChats = []
-            else:
-                recentChats.reverse()
-                memcache.add("recentChats", recentChats, 60*60) 
-        # Check that recentChats is not empty
-        if len(recentChats):
-            latestMsgID = recentChats[-1].id
-            newChats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
-            recentChats.extend(newChats)
-            chats = recentChats
-    else:
-        # Only return the most recent chats
-        chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
-
-    chats = [to_dict(chat) for chat in chats]
-
-    stats = memcache.get_stats()
-    logging.debug("Cache hits: " + str(stats['hits']))
-    logging.debug("Cache misses: " + str(stats['misses']))
-
-    return chats
-
-def saveMessage(msg, latestMsgID):
-    logging.debug("<--------------- saveMessages -------------->")
-
-    # Check if user hasn't been added to CurrentUsers yet
-    newUser = users.get_current_user()
-    # Check if user is already in list
-    user = CurrentUsers.all().filter("user = ", newUser).get()
-    if user is None:
-        logging.debug("adding new user in saveMessage")
-        CurrentUsers.addUser()
-        callback = "chat.getUsers"
-    else:
-        callback = None
-
-    # Replace URLs with html code
-    msg = re.sub(r'(https?:\/\/[0-9a-z_,.:;&=+*%$#!?@()~\'\/-]+)',
-                 r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
-                 msg)
-    #latestChat = ChatMsg.createChatMsg(msg, callback)
-    ChatMsg.createChatMsg(msg, callback)
-    # Subtract 1 so this new message is retrieved as well
-    #latestID = latestChat.id - 1 if latestChat.id else 0
-
-    return loadMessages(latestMsgID)
-
-def getUsers():
-    logging.debug("<-------------- getUsers --------------->")
-
-#    timeFrame = datetime.datetime.now() - timedelta(hours=2)
-#    # Get all current logged in users
-#    userList = CurrentUsers.all().fetch(1000)
-#    recentChats = ChatMsg.all().order("-date").filter("date > ", timeFrame).fetch(200)
-#    # See if each current user has commented in most recent messages
-#    if recentChats:
-#        # Delete users who haven't responded typed in over an hour
-#        for currentUser in userList:
-#            userChats = [chat for chat in recentChats if chat.user == currentUser.user]
-#            if len(userChats) == 0:
-#                logging.debug("user deleted b/c not in recentchats=%s", currentUser.user.nickname())
-#                db.delete(user)
-#                userList.remove(user)
-#            elif userChats[0].date > timeFrame:
-#                continue
-#            else:
-#                logging.debug("user deleted b/c inactive=%s", currentUser.user.nickname())
-#                db.delete(user)
-#                userList.remove(user)
-
-    # Insert current user if not already in db, then update time
-    #currentUser = CurrentUsers.get_or_insert(Key(encoded=users.get_current_user().email()))
-    currentUser = CurrentUsers.all().filter("user = ", users.get_current_user()).get()
-    if currentUser is None:
-        CurrentUsers.addUser()
-    else:
-        currentUser.date = datetime.datetime.now()
-        currentUser.put()
-    # Fetch all users
-    userList = CurrentUsers.all().fetch(1000)
-
-    return [currentUser.user.nickname() for currentUser in userList if currentUser is not None]
-
 def main():
     debug_enabled = True
     LOG_FILENAME = 'logging_example.out'
     logging.basicConfig(filename=LOG_FILENAME, filemode="w", level=logging.DEBUG)
 
     services = {
-        'myservice.echo': echo,
-        'chat.loadMessages': loadMessages,
-        'chat.saveMessage': saveMessage,
-        'chat.getUsers': getUsers
+        'chat.echo': chatroom.echo,
+        'chat.loadMessages': chatroom.loadMessages,
+        'chat.saveMessage': chatroom.saveMessage,
+        'chat.getUsers': chatroom.getUsers,
+        'chat.updateUserPrefs': chatroom.updateUserPrefs
     }
 
     pyamf.DEFAULT_ENCODING = pyamf.AMF3

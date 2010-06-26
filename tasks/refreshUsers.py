@@ -8,26 +8,36 @@ from google.appengine.ext import db
 
 from models.chatroom import * 
 
-#import constants
 from constants import *
 
 class RefreshUsersTask(webapp.RequestHandler):
     def get(self):
+        self.response.headers['Content-Type'] = 'text/html'
+
+        logging.debug("TASK: refreshUsers")
         now = datetime.datetime.now()
+
+        logging.debug("now %s" % now)
+        self.response.out.write("now %s<br />" % now)
+        print("now %s" % now)
+        localtime = now + timedelta(hours=UTC_OFFSET)
+        logging.debug("localtime %s" % localtime)
+        self.response.out.write("localtime %s<br />" % localtime)
+        print("localtime %s" % localtime)
+
         past = now - timedelta(minutes=2)
         # Retrieve all users who haven't sent a keepalive in the past 2 minutes
         q = db.GqlQuery("SELECT * FROM CurrentUsers WHERE date < :1", past)
         results = q.fetch(1000)
-        # Delete the timedout users
-        #db.delete(results)
-        for user in results:
-            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = users.get_current_user().nickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + ' (timed out). Later hater!'
-            user.delete()
+        for currentUser in results:
+            if currentUser.user is not None:
+                msg = currentUser.user.nickname() + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
+                self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())
+                print("user %s was deleted." % currentUser.user.nickname())
+            currentUser.delete()
 
-        self.response.headers['Content-Type'] = 'text/html'
-
-        self.response.out.write("Users who didn't ping since %s were deleted." % past)
+        self.response.out.write("Users who didn't ping since %s were deleted.<br />" % past)
+        print("Users who didn't ping since %s were deleted." % past)
 
 def main():
     debug_enabled = True

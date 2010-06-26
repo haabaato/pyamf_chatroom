@@ -144,15 +144,22 @@ var defaultTitle = document.title;
 var timeoutID;
 
 $(window).blur(function(e) {
+	// Change window title
 	document.title = "Excel file";
 	hasWindowFocus = false;
+
+	// Change favicon
+	setFavicon('wordpress');
+
 });
 
 $(window).focus(function(e) {
 	document.title = defaultTitle;
 	clearInterval(timeoutID);
-	timeoutID = null
+	timeoutID = null;
 	hasWindowFocus = true;
+
+	setFavicon('favicon');
 });
 
 $(window).unload(function(e) {
@@ -175,3 +182,17 @@ function setDocTitle(msg) {
 				document.title = document.title == msg ? ' ' : msg;
 			}, 1000);
 }
+
+function setFavicon(file) {
+    var link = document.createElement('link');
+    link.type = 'image/x-icon';
+    link.rel = 'shortcut icon';
+
+	var domain = document.location.href
+	domain = domain.replace(/^(https?:\/\/.+\/)\w*$/, "$1")
+
+    link.href = domain + 'static/images/' + file + '.ico';
+    document.getElementsByTagName('head')[0].appendChild(link);
+	console.log("setFavIcon to " + link.href)
+}
+

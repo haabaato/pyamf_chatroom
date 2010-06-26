@@ -117,8 +117,9 @@ class CurrentUsers(db.Model):
 
             return wasDeleted
 
-         
-
 class UserPrefs(db.Model):
     user = db.UserProperty()
+    nickname = db.StringProperty()
+    loginMsg = db.StringProperty()
+    logoutMsg = db.StringProperty()
 
