@@ -94,7 +94,7 @@ def getUsers():
     userList = CurrentUsers.all().fetch(1000)
     validUserList = [currentUser for currentUser in userList if currentUser is not None]
     for currentUser in validUserList:
-        # Get user's preferences
+        # Get user's preferences and dynamically create them in the currentUser object
         prefs = UserPrefs.all().filter("user = ", currentUser.user).get()
         # Set user's nickname
         if prefs and prefs.nickname:
@@ -105,6 +105,9 @@ def getUsers():
                                           currentUser.user.email())
         else:
             currentUser.nickname = ""
+
+        if prefs and prefs.isEmailVisible:
+            currentUser.isEmailVisible = prefs.isEmailVisible 
 
         if currentUser.user == users.get_current_user():
             currentUser.isMe = True
