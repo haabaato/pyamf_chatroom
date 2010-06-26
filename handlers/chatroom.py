@@ -11,6 +11,8 @@ from google.appengine.api import users
 from google.appengine.ext import db
 from google.appengine.api import memcache
 from google.appengine.ext.webapp import template
+from google.appengine.ext.db import Key
+from google.appengine.api.datastore import Get, Put
 
 from django.utils import simplejson
 
@@ -118,14 +120,20 @@ def updateUserPrefs(prefs):
     if userPrefs is None:
         userPrefs = UserPrefs()
         userPrefs.user = users.get_current_user()
+        userPrefs.put()
     # Add the new user prefs
-    if prefs.nickname:
-        logging.debug("UPDATING NICKNAME")
-        userPrefs.nickname = prefs.nickname 
-    if prefs.loginMsg:
-        userPrefs.loginMsg = prefs.loginMsg 
-    if prefs.logoutMsg:
-        userPrefs.logoutMsg  = prefs.logoutMsg 
-    userPrefs.put()
+#    if prefs.nickname:
+#        userPrefs.nickname = prefs.nickname 
+#    if prefs.loginMsg:
+#        userPrefs.loginMsg = prefs.loginMsg 
+#    if prefs.logoutMsg:
+#        userPrefs.logoutMsg  = prefs.logoutMsg 
+#    userPrefs.put()
+
+    # Add the user preferences dynamically
+    objEntity = Get(userPrefs.key())
+    for k, v in prefs.iteritems():
+        objEntity[k] = v
+    Put(objEntity)
 
     #return

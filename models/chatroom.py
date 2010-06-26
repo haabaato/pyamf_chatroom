@@ -120,6 +120,7 @@ class CurrentUsers(db.Model):
 class UserPrefs(db.Model):
     user = db.UserProperty()
     nickname = db.StringProperty()
+    isEmailVisible = db.BooleanProperty(default=True)
     loginMsg = db.StringProperty()
     logoutMsg = db.StringProperty()
 
