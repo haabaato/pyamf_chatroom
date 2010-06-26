@@ -124,19 +124,9 @@ def updateUserPrefs(prefs):
         userPrefs = UserPrefs()
         userPrefs.user = users.get_current_user()
         userPrefs.put()
-    # Add the new user prefs
-#    if prefs.nickname:
-#        userPrefs.nickname = prefs.nickname 
-#    if prefs.loginMsg:
-#        userPrefs.loginMsg = prefs.loginMsg 
-#    if prefs.logoutMsg:
-#        userPrefs.logoutMsg  = prefs.logoutMsg 
-#    userPrefs.put()
 
     # Add the user preferences dynamically
     objEntity = Get(userPrefs.key())
     for k, v in prefs.iteritems():
         objEntity[k] = v
     Put(objEntity)
-
-    #return

@@ -177,10 +177,13 @@ $(window).bind('beforeunload',
 
 
 function setDocTitle(msg) {
-	if(!hasWindowFocus && !timeoutID)
+	if(!hasWindowFocus && !timeoutID) {
+		// Blink the msg text in the window title
 		timeoutID = setInterval(function () {
 				document.title = document.title == msg ? ' ' : msg;
 			}, 1000);
+		setFavicon('M');
+	}
 }
 
 function setFavicon(file) {
@@ -191,7 +194,7 @@ function setFavicon(file) {
 	var domain = document.location.href
 	domain = domain.replace(/^(https?:\/\/.+\/)\w*$/, "$1")
 
-    link.href = domain + 'static/images/' + file + '.ico';
+    link.href = domain + file + '.ico';
     document.getElementsByTagName('head')[0].appendChild(link);
 	console.log("setFavIcon to " + link.href)
 }
