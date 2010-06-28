@@ -30,6 +30,7 @@ class RefreshUsersTask(webapp.RequestHandler):
         q = db.GqlQuery("SELECT * FROM CurrentUsers WHERE date < :1", past)
         results = q.fetch(1000)
         for currentUser in results:
+            logging.info("deleting user")
             if currentUser.user is not None:
                 msg = currentUser.user.nickname() + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
                 self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())

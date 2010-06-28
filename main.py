@@ -89,7 +89,8 @@ def main():
         'chat.loadMessages': chatroom.loadMessages,
         'chat.saveMessage': chatroom.saveMessage,
         'chat.getUsers': chatroom.getUsers,
-        'chat.updateUserPrefs': chatroom.updateUserPrefs
+        'chat.updateUserPrefs': chatroom.updateUserPrefs,
+        'chat.execCommand': chatroom.execCommand
     }
 
     pyamf.DEFAULT_ENCODING = pyamf.AMF3

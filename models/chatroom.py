@@ -124,3 +124,9 @@ class UserPrefs(db.Model):
     loginMsg = db.StringProperty()
     logoutMsg = db.StringProperty()
 
+class CommandQueue(db.Model):
+    sender = db.UserProperty()
+    target = db.UserProperty()
+    cmd = db.StringProperty() 
+    msg = db.StringProperty()
+
