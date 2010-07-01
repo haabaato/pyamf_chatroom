@@ -65,6 +65,76 @@ def loadMessages(latestMsgID = 0):
 
     return chats
 
+def loadPrivateMessages(latestMsgID = 0):
+    logging.debug("<--------------- loadPrivateMessages -------------->")
+    logging.info("latestMsgID = %s", latestMsgID)
+#    if latestMsgID != "None":
+#        latestMsgID = re.sub(r'(.+\s.+\s.+\s.+\s).+\s(.+)',
+#                     r'\1\2',
+#                     latestMsgID)
+#
+#        latestMsgID = datetime.datetime.strptime(latestMsgID, "%a %b %d %H:%M:%S %Y")
+#        logging.info("converted latestMsgID = %s", latestMsgID)
+
+    chats = []
+    user = users.get_current_user()
+    HISTORYSIZE = 1000
+    if latestMsgID == 0:
+        # User has just logged in, so send them all the chats
+        recentPrivChats = memcache.get("recentPrivChats")
+        # Query db for most recent messages and store in memcache
+        if recentPrivChats is None:
+            allPrivMsgs = PrivMsg.all().order("date").fetch(HISTORYSIZE)
+            logging.info("# all privates: " + str(len(allPrivMsgs)))
+            recentPrivChats = []
+            if len(allPrivMsgs) != 0:
+                # Remove messages that aren't from or to this user
+                for chat in allPrivMsgs:
+                    #logging.debug(chat)
+                    if chat.sender == user or chat.target == user:
+                        recentPrivChats.append(chat)
+
+                logging.info("# recentPrivChats: " + str(len(recentPrivChats)))
+                memcache.add("recentPrivChats", recentPrivChats, 60*60) 
+        # Check that recentPrivChats is not empty
+        if len(recentPrivChats):
+            #latestMsgID = recentPrivChats[-1].date
+            latestMsgID = recentPrivChats[-1].key().id()
+            #allPrivMsgs = PrivMsg.all().order("date").filter("date > ", latestMsgID).fetch(HISTORYSIZE)
+            #allPrivMsgs = PrivMsg.all().order("date").filter("__key__ > ", KEY('PrivMsg', latestMsgID)).fetch(HISTORYSIZE)
+            allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
+        else:
+            allPrivMsgs = PrivMsg.all().order("date").fetch(HISTORYSIZE)
+        # Remove messages that aren't from or to this user
+        for chat in allPrivMsgs:
+            if chat.sender == user or chat.target == user:
+                recentPrivChats.append(chat)
+
+        chats = recentPrivChats
+        logging.info("# recent chats + new: " + str(len(chats)))
+    else:
+        # Only return the most recent chats
+        #allPrivMsgs = PrivMsg.all().order("date").filter("date > ", latestMsgID).fetch(HISTORYSIZE)
+        #allPrivMsgs = PrivMsg.all().order("date").filter("__key__ > ", KEY('PrivMsg', latestMsgID)).fetch(HISTORYSIZE)
+        allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
+        logging.info("# all privates: " + str(len(allPrivMsgs)))
+        # Remove messages that aren't from or to this user
+        for chat in allPrivMsgs:
+            if chat.sender == user or chat.target == user:
+                chats.append(chat)
+
+    #chats = PrivMsg.all().order("date").fetch(HISTORYSIZE)
+
+    # Add the db id to each object
+    for chat in chats:
+        chat.id = chat.key().id()
+    # Convert each object into a JSON-serializable object
+    chats = [to_dict(chat) for chat in chats]
+
+    logging.info("# privates: " + str(len(chats)))
+    return chats
+
+
 def saveMessage(msg, latestMsgID):
     logging.debug("<--------------- saveMessages -------------->")
 
@@ -90,7 +160,7 @@ def saveMessage(msg, latestMsgID):
     msg = re.sub(r'(https?:\/\/[0-9a-z_,.:;&=+*%$#!?@()~\'\/-]+)',
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  msg)
-    ChatMsg.createChatMsg(msg, callback)
+    ChatMsg.createMsg(msg, callback)
 
     return loadMessages(latestMsgID)
 
@@ -144,18 +214,18 @@ def updateUserPrefs(prefs):
     for k, v in prefs.iteritems():
         objEntity[k] = v
     Put(objEntity)
-
-               
         
 
 def execCommand(latestMsgID, cmd, userName, message):
     logging.debug("<-------------- execCommand --------------->")
-    logging.debug(cmd + ":" + userName + ":" + message)
+    logging.debug(cmd + " - " + userName + " - " + message)
     
     slashCommands[cmd](userName, message)
 
-    #return loadMessages(latestMsgID)
-    return
+    if cmd == 'msg':
+        return loadPrivateMessages(latestMsgID)
+    else:
+        return loadMessages(latestMsgID)
 
 ## The following methods are all helper methods for executing slash commands
 
@@ -180,6 +250,20 @@ def checkCommandQueue():
 
     return None
 
+# Helper method that retrieves User object given nickname
+def findUser(userName):
+    userPrefs = UserPrefs.all().filter("nickname = ", userName).get()
+    if userPrefs:
+        return userPrefs.user
+    else:
+        # Otherwise userName is the default email
+        currentUsers = CurrentUsers.all().fetch(1000)
+        for currentUser in currentUsers:
+            if currentUser.user and currentUser.user.nickname() == userName:
+                return currentUser.user
+
+    # If User object is not found, return nothing
+    return None 
 
 def kickUser(userName, message):
     logging.debug("--kickUser--")
@@ -191,30 +275,22 @@ def kickUser(userName, message):
         logging.warn("User tried to execute admin command: " + str(newCommand.sender))
         return
 
-    
 
     newCommand.cmd = 'kick'
     newCommand.msg = message
-    
-    # First check if userName is a custom nickname
-    userPrefs = UserPrefs.all().filter("nickname = ", userName).get()
-    if userPrefs:
-        newCommand.target = userPrefs.user
-    else:
-        # Otherwise userName is the default email
-        currentUsers = CurrentUsers.all().fetch(1000)
-        for currentUser in currentUsers:
-            if currentUser.user and currentUser.user.nickname() == userName:
-                newCommand.target = currentUser.user
-                break
+    newCommand.target = findUser(userName)
 
     if newCommand.target:
         newCommand.put()
  
     return 
+
+def sendPrivateMessage(userName, message):
+    PrivMsg.createMsg(findUser(userName), message)
+    
     
 slashCommands = {
-    'msg' : lambda x: x * 5,
+    'msg' : sendPrivateMessage,
     'kick' : kickUser
 }
 

@@ -57,9 +57,19 @@ class MainPage(webapp.RequestHandler):
             if result:
                 currentUser = users.get_current_user()
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-                msg = currentUser.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + ". Irasshaimase biatch!"
+
+                # Get user's preferences
+                prefs = UserPrefs.all().filter("user = ", currentUser).get()
+                # Set user's nickname
+                if prefs and prefs.nickname:
+                    nickname = prefs.nickname
+                elif currentUser:
+                    nickname = currentUser.nickname()
+                else:
+                    nickname = "Unknown"
+                msg = nickname + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + ". Irasshaimase biatch!"
                 # Create new login message
-                chatMsg = ChatMsg.createChatMsg(msg, "chat.getUsers")
+                chatMsg = ChatMsg.createMsg(msg, "chat.getUsers")
 
             template_values = {
                 }
@@ -90,7 +100,8 @@ def main():
         'chat.saveMessage': chatroom.saveMessage,
         'chat.getUsers': chatroom.getUsers,
         'chat.updateUserPrefs': chatroom.updateUserPrefs,
-        'chat.execCommand': chatroom.execCommand
+        'chat.execCommand': chatroom.execCommand,
+        'chat.loadPrivateMessages': chatroom.loadPrivateMessages,
     }
 
     pyamf.DEFAULT_ENCODING = pyamf.AMF3

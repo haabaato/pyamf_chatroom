@@ -31,10 +31,21 @@ class RefreshUsersTask(webapp.RequestHandler):
         results = q.fetch(1000)
         for currentUser in results:
             logging.info("deleting user")
-            if currentUser.user is not None:
-                msg = currentUser.user.nickname() + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
-                self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())
-                print("user %s was deleted." % currentUser.user.nickname())
+            # Get user's preferences
+            prefs = UserPrefs.all().filter("user = ", currentUser.user).get()
+            # Set user's nickname
+            if prefs and prefs.nickname:
+                nickname = prefs.nickname
+            elif currentUser.user:
+                nickname = currentUser.user.nickname()
+            else:
+                nickname = "Unknown"
+
+            msg = nickname + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
+            chatMsg = ChatMsg.createMsg(msg, "chat.getUsers")
+
+            self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())
+            print("user %s was deleted." % currentUser.user.nickname())
             currentUser.delete()
 
         self.response.out.write("Users who didn't ping since %s were deleted.<br />" % past)

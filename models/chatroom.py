@@ -47,7 +47,7 @@ class ChatMsg(db.Model):
     callback = db.StringProperty()
 
     @classmethod
-    def createChatMsg(self, msg, callback=None):
+    def createMsg(self, msg, callback=None):
         chatMsg = ChatMsg()
         
         user = users.get_current_user()
@@ -129,4 +129,29 @@ class CommandQueue(db.Model):
     target = db.UserProperty()
     cmd = db.StringProperty() 
     msg = db.StringProperty()
+
+class PrivMsg(db.Model):
+    id = db.IntegerProperty()
+    date = db.DateTimeProperty(auto_now_add=True)
+    sender = db.UserProperty()
+    target = db.UserProperty()
+    msg = db.StringProperty(multiline=True)
+
+    @classmethod
+    def createMsg(self, target, msg):
+        privMsg = PrivMsg()
+        
+        user = users.get_current_user()
+        privMsg.sender = user if user else users.User("Unknown")
+        privMsg.target = target
+        privMsg.msg = msg
+
+        # Get the ID of the latest message
+        #latestChat = ChatMsg.all().order("-id").get()
+        #latestID = latestChat.id if latestChat else 0
+        #chatMsg.id = latestID + 1
+
+        privMsg.put()    
+
+        return privMsg
 
