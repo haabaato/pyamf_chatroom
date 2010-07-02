@@ -43,7 +43,7 @@ class RefreshUsersTask(webapp.RequestHandler):
             logging.warning("deleting user " + nickname)
 
             msg = nickname + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
-            chatMsg = ChatMsg.createMsg(msg, "chat.getUsers")
+            chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
             chatMsg.user = users.User(nickname + "@gmail.com")
             chatMsg.put()
 

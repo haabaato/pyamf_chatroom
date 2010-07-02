@@ -47,11 +47,14 @@ class ChatMsg(db.Model):
     callback = db.StringProperty()
 
     @classmethod
-    def createMsg(self, msg, callback=None):
+    def createMsg(self, msg, callback=None, isAnon=False):
         chatMsg = ChatMsg()
         
         user = users.get_current_user()
-        chatMsg.user = user if user else users.User("Unknown")
+        if isAnon:
+            chatMsg.user = users.User(' ')
+        else:
+            chatMsg.user = user if user else users.User("Unknown")
         chatMsg.msg = msg
 
         # If callback is set, Flash app will issue RPC to service named by callback

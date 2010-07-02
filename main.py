@@ -26,9 +26,9 @@ sys.path.insert(2, os.path.join(APP_ROOT_DIR, 'utils/external/firepython'))
 sys.path.insert(2, os.path.join(APP_ROOT_DIR, 'utils/external/simplejson'))
 from firepython.middleware import FirePythonWSGI
 
-
-#import constants
+# Import constants and helper methods
 from constants import *
+from utils import getNickname
 
 ### For Japanese support
 # -*- coding: utf-8 -*- 
@@ -58,18 +58,18 @@ class MainPage(webapp.RequestHandler):
                 currentUser = users.get_current_user()
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
 
-                # Get user's preferences
-                prefs = UserPrefs.all().filter("user = ", currentUser).get()
-                # Set user's nickname
-                if prefs and prefs.nickname:
-                    nickname = prefs.nickname
-                elif currentUser:
-                    nickname = currentUser.nickname()
-                else:
-                    nickname = "Unknown"
-                msg = nickname + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + ". Irasshaimase biatch!"
+#                # Get user's preferences
+#                prefs = UserPrefs.all().filter("user = ", currentUser).get()
+#                # Set user's nickname
+#                if prefs and prefs.nickname:
+#                    nickname = prefs.nickname
+#                elif currentUser:
+#                    nickname = currentUser.nickname()
+#                else:
+#                    nickname = "Unknown"
+                msg = getNickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + ". Irasshaimase biatch!"
                 # Create new login message
-                chatMsg = ChatMsg.createMsg(msg, "chat.getUsers")
+                chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
             template_values = {
                 }

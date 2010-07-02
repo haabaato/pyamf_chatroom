@@ -19,6 +19,7 @@ from django.utils import simplejson
 ### Model classes
 from models.chatroom import * 
 
+from utils import getNickname
 
 htmlPattern = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
 
@@ -214,6 +215,11 @@ def updateUserPrefs(prefs):
         userPrefs.user = users.get_current_user()
         userPrefs.put()
 
+    # Create a new message
+    if prefs.nickname:
+       msg = getNickname() + ' has changed nickname to: "' + prefs.nickname + '"'
+       ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
+
     # Add the user preferences dynamically
     objEntity = Get(userPrefs.key())
     for k, v in prefs.iteritems():
@@ -297,25 +303,25 @@ def messageOfTheDay(userName, message):
     pass
 
 def emote(userName, message):
-    currentUser = users.get_current_user()
-
-    # Get user's preferences
-    prefs = UserPrefs.all().filter("user = ", currentUser).get()
-    # Set user's nickname
-    if prefs and prefs.nickname:
-        nickname = prefs.nickname
-    elif currentUser:
-        nickname = currentUser.nickname()
-    else:
-        nickname = "Unknown"
-
-    message = "<i>" + nickname + " " + message + "</i>"   
+    message = "<i>" + getNickname() + " " + message + "</i>"   
     ChatMsg.createMsg(message)
+
+def setTopic(userName, message):
+    callback = "updateTopic"
+    # Remove the callbacks from the old topics
+    results = ChatMsg.all().filter("callback = ", callback).fetch(1000)
+    for chat in results:
+        chat.callback = None 
+        chat.put()
+    #msg = '%s has changed the topic to: "%s"' % [getNickname(), message]
+    msg = getNickname() + ' has changed the topic to: "' + message + '"'
+    ChatMsg.createMsg(msg, callback, isAnon=True)
 
 slashCommands = {
     'kick' : kickUser,
     'me' : emote,
     'motd' : messageOfTheDay,
-    'msg' : sendPrivateMessage
+    'msg' : sendPrivateMessage,
+    'topic' : setTopic
 }
 
