@@ -44,14 +44,12 @@ class RefreshUsersTask(webapp.RequestHandler):
 
             msg = nickname + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
             chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
-            chatMsg.user = users.User(nickname + "@gmail.com")
-            chatMsg.put()
+            #chatMsg.user = users.User(nickname + "@gmail.com")
+            #chatMsg.put()
 
-            #self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())
             print("user %s was deleted." % currentUser.user.nickname())
             currentUser.delete()
 
-        #self.response.out.write("Users who didn't ping since %s were deleted.<br />" % past)
         print("Users who didn't ping since %s were deleted." % past)
 
 def main():

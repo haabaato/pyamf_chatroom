@@ -12,6 +12,7 @@ from django.utils import simplejson
 from models.chatroom import * 
 
 from constants import *
+from utils import getNickname
 
 ### RPC methods
 
@@ -76,9 +77,9 @@ class RPCMethods:
             # Show logout msg if user was deleted 
             if result:
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-                msg = users.get_current_user().nickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + '. Later hater!'
+                msg = getNickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + '. Later hater!'
                 # Create logout message
-                ChatMsg.createChatMsg(msg, "chat.getUsers")
+                ChatMsg.createChatMsg(msg, "chat.getUsers", isAnon=True)
 
         else:
             return args[0]
