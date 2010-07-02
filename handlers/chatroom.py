@@ -19,13 +19,23 @@ from django.utils import simplejson
 ### Model classes
 from models.chatroom import * 
 
+
+htmlPattern = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
+
 ### Chat services (PyAMF)
 
 def echo(data):
     return data
 
-def loadMessages(latestMsgID = 0):
+def loadMessages(latestChatID = 0, latestPrivMsgID = 0):
     logging.debug("<--------------- loadMessages -------------->")
+
+    chats = loadChatMessages(latestChatID)
+    privates = loadPrivateMessages(latestPrivMsgID)
+    return [chats, privates]
+
+def loadChatMessages(latestMsgID = 0):
+    logging.debug("<--------------- loadChatMessages -------------->")
 
     # Check if commands need to be executed
     result = checkCommandQueue()
@@ -67,44 +77,40 @@ def loadMessages(latestMsgID = 0):
 
 def loadPrivateMessages(latestMsgID = 0):
     logging.debug("<--------------- loadPrivateMessages -------------->")
-    logging.info("latestMsgID = %s", latestMsgID)
-#    if latestMsgID != "None":
-#        latestMsgID = re.sub(r'(.+\s.+\s.+\s.+\s).+\s(.+)',
-#                     r'\1\2',
-#                     latestMsgID)
-#
-#        latestMsgID = datetime.datetime.strptime(latestMsgID, "%a %b %d %H:%M:%S %Y")
-#        logging.info("converted latestMsgID = %s", latestMsgID)
 
     chats = []
     user = users.get_current_user()
+    if user is None:
+        return
+    logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + user.nickname())
+    memcachekey = "recentPrivChats" + user.nickname()
     HISTORYSIZE = 1000
     if latestMsgID == 0:
         # User has just logged in, so send them all the chats
-        recentPrivChats = memcache.get("recentPrivChats")
+        recentPrivChats = memcache.get(memcachekey)
         # Query db for most recent messages and store in memcache
         if recentPrivChats is None:
-            allPrivMsgs = PrivMsg.all().order("date").fetch(HISTORYSIZE)
-            logging.info("# all privates: " + str(len(allPrivMsgs)))
+            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
+            logging.info("# new cache all privates: " + str(len(allPrivMsgs)))
             recentPrivChats = []
             if len(allPrivMsgs) != 0:
                 # Remove messages that aren't from or to this user
                 for chat in allPrivMsgs:
-                    #logging.debug(chat)
                     if chat.sender == user or chat.target == user:
                         recentPrivChats.append(chat)
 
                 logging.info("# recentPrivChats: " + str(len(recentPrivChats)))
-                memcache.add("recentPrivChats", recentPrivChats, 60*60) 
+                memcache.add(memcachekey, recentPrivChats, 60*60) 
         # Check that recentPrivChats is not empty
         if len(recentPrivChats):
-            #latestMsgID = recentPrivChats[-1].date
-            latestMsgID = recentPrivChats[-1].key().id()
-            #allPrivMsgs = PrivMsg.all().order("date").filter("date > ", latestMsgID).fetch(HISTORYSIZE)
+            #latestMsgID = recentPrivChats[-1].key().id()
+            latestMsgID = recentPrivChats[-1].id
             #allPrivMsgs = PrivMsg.all().order("date").filter("__key__ > ", KEY('PrivMsg', latestMsgID)).fetch(HISTORYSIZE)
-            allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
+            #allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
+            allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
         else:
-            allPrivMsgs = PrivMsg.all().order("date").fetch(HISTORYSIZE)
+            #allPrivMsgs = PrivMsg.all().order("date").fetch(HISTORYSIZE)
+            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
         # Remove messages that aren't from or to this user
         for chat in allPrivMsgs:
             if chat.sender == user or chat.target == user:
@@ -114,20 +120,19 @@ def loadPrivateMessages(latestMsgID = 0):
         logging.info("# recent chats + new: " + str(len(chats)))
     else:
         # Only return the most recent chats
-        #allPrivMsgs = PrivMsg.all().order("date").filter("date > ", latestMsgID).fetch(HISTORYSIZE)
         #allPrivMsgs = PrivMsg.all().order("date").filter("__key__ > ", KEY('PrivMsg', latestMsgID)).fetch(HISTORYSIZE)
-        allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
+        #allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
+        allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
         logging.info("# all privates: " + str(len(allPrivMsgs)))
         # Remove messages that aren't from or to this user
         for chat in allPrivMsgs:
             if chat.sender == user or chat.target == user:
                 chats.append(chat)
 
-    #chats = PrivMsg.all().order("date").fetch(HISTORYSIZE)
-
     # Add the db id to each object
-    for chat in chats:
-        chat.id = chat.key().id()
+    #for chat in chats:
+    #    chat.id = chat.key().id()
+
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
 
@@ -135,7 +140,7 @@ def loadPrivateMessages(latestMsgID = 0):
     return chats
 
 
-def saveMessage(msg, latestMsgID):
+def saveMessage(msg, latestChatID, latestPrivMsgID):
     logging.debug("<--------------- saveMessages -------------->")
 
     # Check if commands need to be executed
@@ -157,12 +162,12 @@ def saveMessage(msg, latestMsgID):
         callback = None
 
     # Replace URLs with html code
-    msg = re.sub(r'(https?:\/\/[0-9a-z_,.:;&=+*%$#!?@()~\'\/-]+)',
+    msg = re.sub(htmlPattern,
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  msg)
     ChatMsg.createMsg(msg, callback)
 
-    return loadMessages(latestMsgID)
+    return loadMessages(latestChatID, latestPrivMsgID)
 
 def getUsers():
     logging.debug("<-------------- getUsers --------------->")
@@ -216,16 +221,18 @@ def updateUserPrefs(prefs):
     Put(objEntity)
         
 
-def execCommand(latestMsgID, cmd, userName, message):
+def execCommand(latestChatID, latestPrivMsgID, cmd, userName, message):
     logging.debug("<-------------- execCommand --------------->")
     logging.debug(cmd + " - " + userName + " - " + message)
-    
+
+    # Replace URLs with html code
+    message = re.sub(htmlPattern,
+                 r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
+                 message)
+   
     slashCommands[cmd](userName, message)
 
-    if cmd == 'msg':
-        return loadPrivateMessages(latestMsgID)
-    else:
-        return loadMessages(latestMsgID)
+    return loadMessages(latestChatID, latestPrivMsgID)
 
 ## The following methods are all helper methods for executing slash commands
 
@@ -247,7 +254,6 @@ def checkCommandQueue():
                 command.delete()
                 return obj
 
-
     return None
 
 # Helper method that retrieves User object given nickname
@@ -267,14 +273,13 @@ def findUser(userName):
 
 def kickUser(userName, message):
     logging.debug("--kickUser--")
-    logging.debug(userName + message)
+    logging.debug(userName + " " + message)
     newCommand = CommandQueue()
     newCommand.sender = users.get_current_user()
 
     if newCommand.sender != users.User("herbert.siojo@gmail.com"):
         logging.warn("User tried to execute admin command: " + str(newCommand.sender))
         return
-
 
     newCommand.cmd = 'kick'
     newCommand.msg = message
@@ -288,9 +293,29 @@ def kickUser(userName, message):
 def sendPrivateMessage(userName, message):
     PrivMsg.createMsg(findUser(userName), message)
     
-    
+def messageOfTheDay(userName, message):
+    pass
+
+def emote(userName, message):
+    currentUser = users.get_current_user()
+
+    # Get user's preferences
+    prefs = UserPrefs.all().filter("user = ", currentUser).get()
+    # Set user's nickname
+    if prefs and prefs.nickname:
+        nickname = prefs.nickname
+    elif currentUser:
+        nickname = currentUser.nickname()
+    else:
+        nickname = "Unknown"
+
+    message = "<i>" + nickname + " " + message + "</i>"   
+    ChatMsg.createMsg(message)
+
 slashCommands = {
-    'msg' : sendPrivateMessage,
-    'kick' : kickUser
+    'kick' : kickUser,
+    'me' : emote,
+    'motd' : messageOfTheDay,
+    'msg' : sendPrivateMessage
 }
 

@@ -147,9 +147,9 @@ class PrivMsg(db.Model):
         privMsg.msg = msg
 
         # Get the ID of the latest message
-        #latestChat = ChatMsg.all().order("-id").get()
-        #latestID = latestChat.id if latestChat else 0
-        #chatMsg.id = latestID + 1
+        latestChat = PrivMsg.all().order("-id").get()
+        latestID = latestChat.id if latestChat else 0
+        privMsg.id = latestID + 1
 
         privMsg.put()    
 

@@ -30,7 +30,6 @@ class RefreshUsersTask(webapp.RequestHandler):
         q = db.GqlQuery("SELECT * FROM CurrentUsers WHERE date < :1", past)
         results = q.fetch(1000)
         for currentUser in results:
-            logging.info("deleting user")
             # Get user's preferences
             prefs = UserPrefs.all().filter("user = ", currentUser.user).get()
             # Set user's nickname
@@ -41,14 +40,18 @@ class RefreshUsersTask(webapp.RequestHandler):
             else:
                 nickname = "Unknown"
 
+            logging.warning("deleting user " + nickname)
+
             msg = nickname + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
             chatMsg = ChatMsg.createMsg(msg, "chat.getUsers")
+            chatMsg.user = users.User(nickname + "@gmail.com")
+            chatMsg.put()
 
-            self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())
+            #self.response.out.write("user %s was deleted.<br />" % currentUser.user.nickname())
             print("user %s was deleted." % currentUser.user.nickname())
             currentUser.delete()
 
-        self.response.out.write("Users who didn't ping since %s were deleted.<br />" % past)
+        #self.response.out.write("Users who didn't ping since %s were deleted.<br />" % past)
         print("Users who didn't ping since %s were deleted." % past)
 
 def main():
