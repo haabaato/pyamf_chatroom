@@ -236,7 +236,9 @@ def execCommand(latestChatID, latestPrivMsgID, cmd, userName, message):
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  message)
    
-    slashCommands[cmd](userName, message)
+    result = slashCommands[cmd](userName, message)
+    if result is not None:
+        return result
 
     return loadMessages(latestChatID, latestPrivMsgID)
 
@@ -285,7 +287,7 @@ def kickUser(userName, message):
 
     if newCommand.sender != users.User("herbert.siojo@gmail.com"):
         logging.warn("User tried to execute admin command: " + str(newCommand.sender))
-        return
+        return "You do not have admin powers."
 
     newCommand.cmd = 'kick'
     newCommand.msg = message
