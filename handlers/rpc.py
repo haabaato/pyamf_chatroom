@@ -79,7 +79,7 @@ class RPCMethods:
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
                 msg = getNickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + '. Later hater!'
                 # Create logout message
-                ChatMsg.createChatMsg(msg, "chat.getUsers", isAnon=True)
+                ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
         else:
             return args[0]

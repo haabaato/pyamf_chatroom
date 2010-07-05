@@ -315,8 +315,7 @@ def setTopic(userName, message):
     for chat in results:
         chat.callback = None 
         chat.put()
-    #msg = '%s has changed the topic to: "%s"' % [getNickname(), message]
-    msg = getNickname() + ' has changed the topic to: "' + message + '"'
+    msg = '%s has changed the topic to: "%s"' % (getNickname(), message)
     ChatMsg.createMsg(msg, callback, isAnon=True)
 
 slashCommands = {

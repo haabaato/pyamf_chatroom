@@ -155,7 +155,8 @@ $(window).blur(function(e) {
 
 $(window).focus(function(e) {
 	document.title = defaultTitle;
-	clearInterval(timeoutID);
+	if(timeoutID)
+		clearInterval(timeoutID);
 	timeoutID = null;
 	hasWindowFocus = true;
 
@@ -179,7 +180,7 @@ $(window).bind('beforeunload',
 function setDocTitle(msg) {
 	if(!hasWindowFocus && !timeoutID) {
 		// Blink the msg text in the window title
-		timeoutID = setInterval(function () {
+		timeoutID = window.setInterval(function () {
 				document.title = document.title == msg ? ' ' : msg;
 			}, 1000);
 		setFavicon('M');
@@ -189,13 +190,24 @@ function setDocTitle(msg) {
 function setFavicon(file) {
     var link = document.createElement('link');
     link.type = 'image/x-icon';
-    link.rel = 'shortcut icon';
 
-	var domain = document.location.href
-	domain = domain.replace(/^(https?:\/\/.+\/)\w*$/, "$1")
+	var domain = document.location.href;
+	domain = domain.replace(/^(https?:\/\/.+\/)\w*$/, "$1");
 
     link.href = domain + file + '.ico';
-    document.getElementsByTagName('head')[0].appendChild(link);
-	console.log("setFavIcon to " + link.href)
+	var is_chrome = navigator.userAgent.toLowerCase().indexOf('chrome') > -1;
+	if(is_chrome) {
+		console.log("chrome detected");
+		// Append another link for compatibility in Safari, Chrome
+		link.rel = 'icon';
+		document.getElementsByTagName('head')[0].appendChild(link);
+	}
+	else {
+		link.rel = 'shortcut icon';
+		document.getElementsByTagName('head')[0].appendChild(link);
+	}
+	console.log("setFavIcon to href=" + link.href + " type=" + link.type + " rel=" + link.rel)
+	
+	
 }
 

@@ -40,15 +40,13 @@ class RefreshUsersTask(webapp.RequestHandler):
             else:
                 nickname = "Unknown"
 
-            logging.warning("deleting user " + nickname)
+            logging.info("deleting user " + nickname)
 
             msg = nickname + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
             chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
-            #chatMsg.user = users.User(nickname + "@gmail.com")
-            #chatMsg.put()
 
-            print("user %s was deleted." % currentUser.user.nickname())
             currentUser.delete()
+            print("user %s was deleted." % nickname)
 
         print("Users who didn't ping since %s were deleted." % past)
 

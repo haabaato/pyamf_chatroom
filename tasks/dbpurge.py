@@ -24,7 +24,7 @@ class DbPurgeTask(webapp.RequestHandler):
 
 class DbPurgeAllTask(webapp.RequestHandler):
     def get(self):
-        results = ChatMsg.all().fetch(1000)
+        results = ChatMsg.all().fetch(500)
         db.delete(results)
         # clear memcache as well
         memcache.delete("recentChats")
