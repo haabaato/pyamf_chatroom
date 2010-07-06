@@ -13,7 +13,7 @@ class DbPurgeTask(webapp.RequestHandler):
         now = datetime.datetime.now()
         pastDay = now - timedelta(2)
         q = db.GqlQuery("SELECT * FROM ChatMsg WHERE date < :1", pastDay)
-        results = q.fetch(1000)
+        results = q.fetch(500)
         db.delete(results)
         # clear memcache as well
         memcache.delete("recentChats")

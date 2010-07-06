@@ -70,9 +70,9 @@ def loadChatMessages(latestMsgID = 0):
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
 
-    stats = memcache.get_stats()
-    logging.debug("Cache hits: " + str(stats['hits']))
-    logging.debug("Cache misses: " + str(stats['misses']))
+    #stats = memcache.get_stats()
+    #logging.debug("Cache hits: " + str(stats['hits']))
+    #logging.debug("Cache misses: " + str(stats['misses']))
 
     return chats
 

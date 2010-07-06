@@ -46,7 +46,6 @@ class RefreshUsersTask(webapp.RequestHandler):
             chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
             currentUser.delete()
-            print("user %s was deleted." % nickname)
 
         print("Users who didn't ping since %s were deleted." % past)
 
