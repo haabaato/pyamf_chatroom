@@ -58,15 +58,6 @@ class MainPage(webapp.RequestHandler):
                 currentUser = users.get_current_user()
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
 
-#                # Get user's preferences
-#                prefs = UserPrefs.all().filter("user = ", currentUser).get()
-#                # Set user's nickname
-#                if prefs and prefs.nickname:
-#                    nickname = prefs.nickname
-#                elif currentUser:
-#                    nickname = currentUser.nickname()
-#                else:
-#                    nickname = "Unknown"
                 msg = getNickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + ". Irasshaimase biatch!"
                 # Create new login message
                 chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
@@ -102,6 +93,7 @@ def main():
         'chat.updateUserPrefs': chatroom.updateUserPrefs,
         'chat.execCommand': chatroom.execCommand,
         'chat.loadPrivateMessages': chatroom.loadPrivateMessages,
+        'chat.emailLog': chatroom.emailLog,
     }
 
     pyamf.DEFAULT_ENCODING = pyamf.AMF3
@@ -111,7 +103,8 @@ def main():
         ('/', gateway), 
         ('/chat', MainPage),
         ('/login', LoginPage),
-        ('/rpc', rpc.RPCHandler)
+        ('/rpc', rpc.RPCHandler),
+        ('/_ah/xmpp/message/chat/', chatroom.XMPPHandler)
         ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 

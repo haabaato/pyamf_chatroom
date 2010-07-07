@@ -68,6 +68,28 @@ class ChatMsg(db.Model):
 
         return chatMsg
 
+    @classmethod
+    def createXmppMsg(self, sender, msg, callback=None, isAnon=False):
+        chatMsg = ChatMsg()
+        
+        if isAnon:
+            chatMsg.user = users.User(' ')
+        else:
+            chatMsg.user = users.User(sender)
+        chatMsg.msg = msg
+
+        # If callback is set, Flash app will issue RPC to service named by callback
+        chatMsg.callback = callback
+
+        # Get the ID of the latest message
+        latestChat = ChatMsg.all().order("-id").get()
+        latestID = latestChat.id if latestChat else 0
+        chatMsg.id = latestID + 1
+        chatMsg.put()    
+
+        return chatMsg
+
+
 class CurrentUsers(db.Model):
     """
     Stores the logged in users. 
@@ -75,6 +97,7 @@ class CurrentUsers(db.Model):
     user = db.UserProperty()
     date = db.DateTimeProperty(auto_now_add=True)
     loginCount = db.IntegerProperty(default=1)
+    isXmpp = db.BooleanProperty()
 
     @classmethod
     def addUser(self):
@@ -83,12 +106,11 @@ class CurrentUsers(db.Model):
         Returns true if user was added, false if not.
         """
         currentUser = users.get_current_user()
-        newUser = CurrentUsers()
-        #newUser = CurrentUsers( key=Key(encoded=currentUser.email()) )
-        newUser.user = currentUser
         # Check if user is already in list
-        user = CurrentUsers.all().filter("user = ", users.get_current_user()).get()
+        user = CurrentUsers.all().filter("user = ", currentUser).get()
         if user is None:
+            newUser = CurrentUsers()
+            newUser.user = currentUser
             newUser.put()
             wasAdded = True
         else:
@@ -126,6 +148,7 @@ class UserPrefs(db.Model):
     isEmailVisible = db.BooleanProperty(default=True)
     loginMsg = db.StringProperty()
     logoutMsg = db.StringProperty()
+    lastEmailRequest = db.DateTimeProperty()
 
 class CommandQueue(db.Model):
     sender = db.UserProperty()

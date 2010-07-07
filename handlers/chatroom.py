@@ -13,16 +13,20 @@ from google.appengine.api import memcache
 from google.appengine.ext.webapp import template
 from google.appengine.ext.db import Key
 from google.appengine.api.datastore import Get, Put
+from google.appengine.api import mail
+from google.appengine.api import xmpp
 
 from django.utils import simplejson
 
 ### Model classes
 from models.chatroom import * 
 
+# Import constants and helper methods
+from constants import *
 from utils import getNickname
 
-htmlPattern = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
-
+HTML_REGEX = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
+XMPP_MSG = "%s, %s: %s\n"
 ### Chat services (PyAMF)
 
 def echo(data):
@@ -163,10 +167,18 @@ def saveMessage(msg, latestChatID, latestPrivMsgID):
         callback = None
 
     # Replace URLs with html code
-    msg = re.sub(htmlPattern,
+    msg = re.sub(HTML_REGEX,
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  msg)
-    ChatMsg.createMsg(msg, callback)
+    chat = ChatMsg.createMsg(msg, callback)
+
+    # Send this message to all XMPP clients
+    xmppUsers = CurrentUsers.all().filter("isXmpp = ", True).fetch(1000)
+    logging.info(len(xmppUsers))
+    if len(xmppUsers) > 0:
+        xmppUsers = [xmppUser.user.email() for xmppUser in xmppUsers]
+        chat = to_dict(chat)
+        xmpp.send_message(xmppUsers, XMPP_MSG % (chat['date'], chat['user'], chat['msg']))
 
     return loadMessages(latestChatID, latestPrivMsgID)
 
@@ -232,7 +244,7 @@ def execCommand(latestChatID, latestPrivMsgID, cmd, userName, message):
     logging.debug(cmd + " - " + userName + " - " + message)
 
     # Replace URLs with html code
-    message = re.sub(htmlPattern,
+    message = re.sub(HTML_REGEX,
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  message)
    
@@ -326,3 +338,80 @@ slashCommands = {
     'topic' : setTopic
 }
 
+def emailLog():
+    logging.debug("<-------------- emailLog --------------->")
+    currentUser = users.get_current_user()
+    if currentUser is None:
+        return
+
+    now = datetime.datetime.now()
+    userPrefs = UserPrefs.all().filter("user = ", currentUser).get()
+    if userPrefs:
+        # Only allow email requests after a 30 min waiting period
+        past = now - timedelta(minutes=30)
+        if userPrefs.lastEmailRequest is None:
+            userPrefs.lastEmailRequest = now
+            userPrefs.put()
+        logging.debug(str(past) + " " + str(userPrefs.lastEmailRequest))
+        if userPrefs.lastEmailRequest > past:
+            return "Sorry, you can only request an email once every 30 minutes."
+    else:
+        userPrefs = UserPrefs()
+        userPrefs.user = users.get_current_user()
+
+    # Update user preferences to log latest email request
+    userPrefs.lastEmailRequest = now
+    userPrefs.put()
+
+    email = currentUser.email() 
+
+    subject = "Chat logs for %s" % datetime.datetime.now()
+
+    # Load all chat messages and private messages
+    [chats, privates] = loadMessages(0, 0)
+
+    body = "------------------------------ Chat Messages ------------------------------\n\n"
+    
+    for chat in chats:
+        body += "%s %s: %s\n" % (chat['date'], chat['user'], chat['msg'])
+    
+    body += "\n\n------------------------------ Private Messages ------------------------------\n\n"
+
+    for priv in privates:
+        body += "%s %s -> %s: %s\n" % (priv['date'], priv['sender'], priv['target'], priv['msg'])
+
+    mail.send_mail(email, email, subject, body)
+    logging.debug(body)
+
+class XMPPHandler(webapp.RequestHandler):
+    def post(self):
+        logging.debug("<-------------- XMPPHandler --------------->")
+        message = xmpp.Message(self.request.POST)
+        logging.debug("sender: %s, to: %s, body: %s" % (message.sender, message.to, message.body))
+        currentUser = CurrentUsers.all().filter("email = ", message.sender).get()
+        if currentUser is None:
+            logging.debug("adding new user in saveMessage")
+            # Add to list of current users
+            currentUser = CurrentUsers()
+            currentUser.isXmpp = True
+            currentUser.user = users.User(message.sender)
+            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
+            msg = currentUser.user.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + " from Google Talk. Irasshaimase biatch!"
+            # Create new login message
+            chatMsg = ChatMsg.createXmppMsg(message.sender, msg, "chat.getUsers", isAnon=True)
+
+            # Send recent chats to the XMPP user
+            recentChats = ChatMsg.all().order("-date").fetch(20)
+            recentChats.reverse()
+
+            reply = "\n"
+            chats = [to_dict(chat) for chat in recentChats]
+            for chat in chats:
+                reply += XMPP_MSG % (chat['date'], chat['user'], chat['msg'])
+            message.reply(reply)
+
+        # Replace URLs with html code
+        msg = re.sub(HTML_REGEX,
+                     r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
+                     message.body)
+        ChatMsg.createXmppMsg(message.sender, msg)

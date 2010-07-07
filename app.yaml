@@ -15,9 +15,6 @@ handlers:
 - url: /js
   static_dir: js
 # Images
-#- url: /favicon.ico
-#  static_files: static/images/favicon.ico
-#  upload: static/images/favicon.ico
 - url: /(.*).ico
   static_files: static/images/\1.ico
   upload: static/images/(.*).ico
@@ -39,3 +36,6 @@ handlers:
   login: admin
 - url: /.*
   script: main.py
+
+inbound_services:
+- xmpp_message
