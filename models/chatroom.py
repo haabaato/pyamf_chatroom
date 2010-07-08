@@ -3,7 +3,7 @@ import logging
 from google.appengine.api import memcache
 from google.appengine.ext import db
 from google.appengine.api import users
-
+from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
 from google.appengine.ext.db import Key
 
 import datetime
@@ -85,7 +85,11 @@ class ChatMsg(db.Model):
         latestChat = ChatMsg.all().order("-id").get()
         latestID = latestChat.id if latestChat else 0
         chatMsg.id = latestID + 1
-        chatMsg.put()    
+        try:
+            chatMsg.put()    
+        except CapabilityDisabledError:
+            logging.warn("datastore maintenance")
+            pass
 
         return chatMsg
 
@@ -97,7 +101,7 @@ class CurrentUsers(db.Model):
     user = db.UserProperty()
     date = db.DateTimeProperty(auto_now_add=True)
     loginCount = db.IntegerProperty(default=1)
-    isXmpp = db.BooleanProperty()
+    xmpp = db.IMProperty()
 
     @classmethod
     def addUser(self):

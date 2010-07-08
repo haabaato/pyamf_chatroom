@@ -4,8 +4,9 @@ from google.appengine.api import users
 from models.chatroom import * 
 
 # Helper method that retrieves current user's nickname
-def getNickname():
-    currentUser = users.get_current_user()
+def getNickname(currentUser=None):
+    if currentUser is None:
+        currentUser = users.get_current_user()
 
     # Get user's preferences
     prefs = UserPrefs.all().filter("user = ", currentUser).get()

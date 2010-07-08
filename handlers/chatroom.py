@@ -15,6 +15,8 @@ from google.appengine.ext.db import Key
 from google.appengine.api.datastore import Get, Put
 from google.appengine.api import mail
 from google.appengine.api import xmpp
+from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
+
 
 from django.utils import simplejson
 
@@ -27,6 +29,7 @@ from utils import getNickname
 
 HTML_REGEX = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
 XMPP_MSG = "%s, %s: %s\n"
+MAINTENANCE_MSG = "Sorry, Google's database is currently undergoing maintenance."
 ### Chat services (PyAMF)
 
 def echo(data):
@@ -96,7 +99,6 @@ def loadPrivateMessages(latestMsgID = 0):
         # Query db for most recent messages and store in memcache
         if recentPrivChats is None:
             allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
-            logging.info("# new cache all privates: " + str(len(allPrivMsgs)))
             recentPrivChats = []
             if len(allPrivMsgs) != 0:
                 # Remove messages that aren't from or to this user
@@ -104,17 +106,12 @@ def loadPrivateMessages(latestMsgID = 0):
                     if chat.sender == user or chat.target == user:
                         recentPrivChats.append(chat)
 
-                logging.info("# recentPrivChats: " + str(len(recentPrivChats)))
                 memcache.add(memcachekey, recentPrivChats, 60*60) 
         # Check that recentPrivChats is not empty
         if len(recentPrivChats):
-            #latestMsgID = recentPrivChats[-1].key().id()
             latestMsgID = recentPrivChats[-1].id
-            #allPrivMsgs = PrivMsg.all().order("date").filter("__key__ > ", KEY('PrivMsg', latestMsgID)).fetch(HISTORYSIZE)
-            #allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
             allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
         else:
-            #allPrivMsgs = PrivMsg.all().order("date").fetch(HISTORYSIZE)
             allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
         # Remove messages that aren't from or to this user
         for chat in allPrivMsgs:
@@ -122,13 +119,9 @@ def loadPrivateMessages(latestMsgID = 0):
                 recentPrivChats.append(chat)
 
         chats = recentPrivChats
-        logging.info("# recent chats + new: " + str(len(chats)))
     else:
         # Only return the most recent chats
-        #allPrivMsgs = PrivMsg.all().order("date").filter("__key__ > ", KEY('PrivMsg', latestMsgID)).fetch(HISTORYSIZE)
-        #allPrivMsgs = db.GqlQuery("SELECT * FROM PrivMsg WHERE __key__ > KEY('PrivMsg', :1)", latestMsgID).fetch(HISTORYSIZE)
         allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
-        logging.info("# all privates: " + str(len(allPrivMsgs)))
         # Remove messages that aren't from or to this user
         for chat in allPrivMsgs:
             if chat.sender == user or chat.target == user:
@@ -141,7 +134,7 @@ def loadPrivateMessages(latestMsgID = 0):
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
 
-    logging.info("# privates: " + str(len(chats)))
+    #logging.info("# privates: " + str(len(chats)))
     return chats
 
 
@@ -173,12 +166,12 @@ def saveMessage(msg, latestChatID, latestPrivMsgID):
     chat = ChatMsg.createMsg(msg, callback)
 
     # Send this message to all XMPP clients
-    xmppUsers = CurrentUsers.all().filter("isXmpp = ", True).fetch(1000)
-    logging.info(len(xmppUsers))
+    xmppUsers = CurrentUsers.all().filter("xmpp != ", None).fetch(1000)
+    logging.info("xmppUsers = " + str(len(xmppUsers)))
     if len(xmppUsers) > 0:
         xmppUsers = [xmppUser.user.email() for xmppUser in xmppUsers]
-        chat = to_dict(chat)
-        xmpp.send_message(xmppUsers, XMPP_MSG % (chat['date'], chat['user'], chat['msg']))
+        #chat = to_dict(chat)
+        xmpp.send_message(xmppUsers, XMPPHandler.parseChatMsg(chat)) #XMPP_MSG % (chat['date'], chat['user'], chat['msg']))
 
     return loadMessages(latestChatID, latestPrivMsgID)
 
@@ -191,7 +184,11 @@ def getUsers():
         CurrentUsers.addUser()
     else:
         currentUser.date = datetime.datetime.now()
-        currentUser.put()
+        try:
+            currentUser.put()
+        except CapabilityDisabledError:
+            logging.warn("datastore maintenance")
+            return MAINTENANCE_MSG
     # Fetch all users
     userList = CurrentUsers.all().fetch(1000)
     validUserList = [currentUser for currentUser in userList if currentUser is not None]
@@ -225,7 +222,11 @@ def updateUserPrefs(prefs):
     if userPrefs is None:
         userPrefs = UserPrefs()
         userPrefs.user = users.get_current_user()
-        userPrefs.put()
+        try:
+            userPrefs.put()
+        except CapabilityDisabledError:
+            logging.warn("datastore maintenance")
+            return MAINTENANCE_MSG
 
     # Create a new message
     if prefs.nickname:
@@ -388,16 +389,24 @@ class XMPPHandler(webapp.RequestHandler):
         logging.debug("<-------------- XMPPHandler --------------->")
         message = xmpp.Message(self.request.POST)
         logging.debug("sender: %s, to: %s, body: %s" % (message.sender, message.to, message.body))
-        currentUser = CurrentUsers.all().filter("email = ", message.sender).get()
+        currentUser = CurrentUsers.all().filter("xmpp = ", db.IM("xmpp", message.sender)).get()
         if currentUser is None:
-            logging.debug("adding new user in saveMessage")
+            logging.debug("adding new user in xmpp handler")
             # Add to list of current users
             currentUser = CurrentUsers()
-            currentUser.isXmpp = True
-            currentUser.user = users.User(message.sender)
-            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = currentUser.user.nickname() + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + " from Google Talk. Irasshaimase biatch!"
+            currentUser.xmpp = db.IM("xmpp", message.sender)
+            email = re.sub(r'(.*)\/.*', r'\1', message.sender)
+            currentUser.user = users.User(email)
+            try:
+                currentUser.put()
+            except CapabilityDisabledError:
+                logging.warn("datastore maintenance")
+                message.reply(MAINTENANCE_MSG)
+                return 
+
             # Create new login message
+            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
+            msg = getNickname(currentUser.user) + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + " from Google Talk. Irasshaimase biatch!"
             chatMsg = ChatMsg.createXmppMsg(message.sender, msg, "chat.getUsers", isAnon=True)
 
             # Send recent chats to the XMPP user
@@ -405,9 +414,9 @@ class XMPPHandler(webapp.RequestHandler):
             recentChats.reverse()
 
             reply = "\n"
-            chats = [to_dict(chat) for chat in recentChats]
-            for chat in chats:
-                reply += XMPP_MSG % (chat['date'], chat['user'], chat['msg'])
+            #chats = [to_dict(chat) for chat in recentChats]
+            for chat in recentChats:
+                reply += XMPPHandler.parseChatMsg(chat)
             message.reply(reply)
 
         # Replace URLs with html code
@@ -415,3 +424,10 @@ class XMPPHandler(webapp.RequestHandler):
                      r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                      message.body)
         ChatMsg.createXmppMsg(message.sender, msg)
+
+    @staticmethod
+    def parseChatMsg(chat):
+        date = re.sub(r'(.*)\.\d+', r'\1', str(chat.date))
+        user = getNickname(chat.user)
+        msg = re.sub(r'<.*?>', r'', chat.msg)
+        return XMPP_MSG % (date, user, msg)

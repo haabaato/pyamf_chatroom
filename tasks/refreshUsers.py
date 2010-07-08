@@ -19,15 +19,16 @@ class RefreshUsersTask(webapp.RequestHandler):
 
         logging.debug("now %s" % now)
         self.response.out.write("now %s<br />" % now)
-        print("now %s" % now)
+        logging.info("now %s" % now)
         localtime = now + timedelta(hours=UTC_OFFSET)
         logging.debug("localtime %s" % localtime)
         self.response.out.write("localtime %s<br />" % localtime)
-        print("localtime %s" % localtime)
+        logging.info("localtime %s" % localtime)
 
         past = now - timedelta(minutes=2)
         # Retrieve all users who haven't sent a keepalive in the past 2 minutes
-        q = db.GqlQuery("SELECT * FROM CurrentUsers WHERE date < :1", past)
+        #q = db.GqlQuery("SELECT * FROM CurrentUsers WHERE date < :1 AND xmpp = NULL", past)
+        q = CurrentUsers.all().filter("date < ", past).filter("xmpp = ", None)
         results = q.fetch(1000)
         for currentUser in results:
             # Get user's preferences
@@ -47,7 +48,13 @@ class RefreshUsersTask(webapp.RequestHandler):
 
             currentUser.delete()
 
-        print("Users who didn't ping since %s were deleted." % past)
+        xmppUsers = CurrentUsers.all().filter("xmpp != ", None)
+        for user in xmppUsers:
+            if not xmpp.get_presence(user.xmpp):
+                logging.info("deleting XMPP user " + user.user.nickname())
+                user.delete()
+
+        logging.info("Users who didn't ping since %s were deleted." % past)
 
 def main():
     debug_enabled = True
