@@ -1,5 +1,6 @@
 import datetime
 from datetime import timedelta
+
 import os
 import re
 
@@ -22,14 +23,22 @@ from django.utils import simplejson
 
 ### Model classes
 from models.chatroom import * 
+from handlers.XMPPInterface import *
 
 # Import constants and helper methods
 from constants import *
 from utils import getNickname
 
+HISTORYSIZE = 1000
 HTML_REGEX = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
-XMPP_MSG = "%s, %s: %s\n"
+XMPP_CHAT_MSG = "%s, %s: %s\n"
 MAINTENANCE_MSG = "Sorry, Google's database is currently undergoing maintenance."
+WELCOME_MSG = """Welcome to Haabaato's chatroom!
+Here's the most recent messages...
+"""
+CHAT_MSG = "%s %s: %s\n"
+PRIV_MSG = "%s %s -> %s: %s\n"
+
 ### Chat services (PyAMF)
 
 def echo(data):
@@ -52,7 +61,6 @@ def loadChatMessages(latestMsgID = 0):
         logging.debug(result)
         return result
 
-    HISTORYSIZE = 1000
     if latestMsgID == 0:
         # User has just logged in, so send them all the chats
         recentChats = memcache.get("recentChats")
@@ -92,7 +100,6 @@ def loadPrivateMessages(latestMsgID = 0):
         return
     logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + user.nickname())
     memcachekey = "recentPrivChats" + user.nickname()
-    HISTORYSIZE = 1000
     if latestMsgID == 0:
         # User has just logged in, so send them all the chats
         recentPrivChats = memcache.get(memcachekey)
@@ -138,7 +145,7 @@ def loadPrivateMessages(latestMsgID = 0):
     return chats
 
 
-def saveMessage(msg, latestChatID, latestPrivMsgID):
+def saveMessage(msg, latestChatID):
     logging.debug("<--------------- saveMessages -------------->")
 
     # Check if commands need to be executed
@@ -170,10 +177,14 @@ def saveMessage(msg, latestChatID, latestPrivMsgID):
     logging.info("xmppUsers = " + str(len(xmppUsers)))
     if len(xmppUsers) > 0:
         xmppUsers = [xmppUser.user.email() for xmppUser in xmppUsers]
-        #chat = to_dict(chat)
-        xmpp.send_message(xmppUsers, XMPPHandler.parseChatMsg(chat)) #XMPP_MSG % (chat['date'], chat['user'], chat['msg']))
+        xmpp.send_message(xmppUsers, XMPPHandler.parseChatMsg(chat)) 
 
-    return loadMessages(latestChatID, latestPrivMsgID)
+    #return loadMessages(latestChatID, latestPrivMsgID)
+    return loadChatMessages(latestChatID)
+
+#class UserObj():
+#    pass
+
 
 def getUsers():
     logging.debug("<-------------- getUsers --------------->")
@@ -192,28 +203,40 @@ def getUsers():
     # Fetch all users
     userList = CurrentUsers.all().fetch(1000)
     validUserList = [currentUser for currentUser in userList if currentUser is not None]
+    userObjList = []
     for currentUser in validUserList:
+        userObj = {}
         # Get user's preferences and dynamically create them in the currentUser object
         prefs = UserPrefs.all().filter("user = ", currentUser.user).get()
         # Set user's nickname
         if prefs and prefs.nickname:
-            currentUser.nickname = prefs.nickname 
+            #currentUser.nickname = prefs.nickname 
+            nickname = prefs.nickname 
         elif currentUser.user:
-            currentUser.nickname = re.sub(r'^(.+)@.+$',
+            #currentUser.nickname = re.sub(r'^(.+)@.+$',
+            nickname = re.sub(r'^(.+)@.+$',
                                           r'\1',
                                           currentUser.user.email())
         else:
-            currentUser.nickname = ""
+            #currentUser.nickname = ""
+            nickname = ""
+        userObj['nickname'] = nickname
 
         if prefs and prefs.isEmailVisible:
-            currentUser.isEmailVisible = prefs.isEmailVisible 
+            #currentUser.isEmailVisible = prefs.isEmailVisible 
+            email = currentUser.user.email()
+        else:
+            email = "Hidden"
+        userObj['email'] = email
 
-        if currentUser.user == users.get_current_user():
-            currentUser.isMe = True
+        userObjList.append(userObj)
+        #if currentUser.user == users.get_current_user():
+        #    currentUser.isMe = True
 
     logging.debug(validUserList)
     #return [currentUser.user.nickname() for currentUser in userList if currentUser is not None]
-    return validUserList
+    #return validUserList
+    return userObjList
 
 def updateUserPrefs(prefs):
     logging.debug("<-------------- updateUserPrefs --------------->")
@@ -250,10 +273,12 @@ def execCommand(latestChatID, latestPrivMsgID, cmd, userName, message):
                  message)
    
     result = slashCommands[cmd](userName, message)
-    if result is not None:
+    if result is loadPrivateMessages:
+        return loadPrivateMessages(latestPrivMsgID) 
+    elif result is not None:
         return result
-
-    return loadMessages(latestChatID, latestPrivMsgID)
+    else:
+        return loadChatMessages(latestChatID)
 
 ## The following methods are all helper methods for executing slash commands
 
@@ -313,10 +338,8 @@ def kickUser(userName, message):
 
 def sendPrivateMessage(userName, message):
     PrivMsg.createMsg(findUser(userName), message)
+    return loadPrivateMessages
     
-def messageOfTheDay(userName, message):
-    pass
-
 def emote(userName, message):
     message = "<i>" + getNickname() + " " + message + "</i>"   
     ChatMsg.createMsg(message)
@@ -334,7 +357,6 @@ def setTopic(userName, message):
 slashCommands = {
     'kick' : kickUser,
     'me' : emote,
-    'motd' : messageOfTheDay,
     'msg' : sendPrivateMessage,
     'topic' : setTopic
 }
@@ -350,11 +372,8 @@ def emailLog():
     if userPrefs:
         # Only allow email requests after a 30 min waiting period
         past = now - timedelta(minutes=30)
-        if userPrefs.lastEmailRequest is None:
-            userPrefs.lastEmailRequest = now
-            userPrefs.put()
-        logging.debug(str(past) + " " + str(userPrefs.lastEmailRequest))
-        if userPrefs.lastEmailRequest > past:
+        logging.debug("past=" + str(past) + " lastReq=" + str(userPrefs.lastEmailRequest))
+        if userPrefs.lastEmailReques and tuserPrefs.lastEmailRequest > past:
             return "Sorry, you can only request an email once every 30 minutes."
     else:
         userPrefs = UserPrefs()
@@ -374,60 +393,12 @@ def emailLog():
     body = "------------------------------ Chat Messages ------------------------------\n\n"
     
     for chat in chats:
-        body += "%s %s: %s\n" % (chat['date'], chat['user'], chat['msg'])
+        body += CHAT_MSG % (chat['date'], chat['user'], chat['msg'])
     
     body += "\n\n------------------------------ Private Messages ------------------------------\n\n"
 
     for priv in privates:
-        body += "%s %s -> %s: %s\n" % (priv['date'], priv['sender'], priv['target'], priv['msg'])
+        body += PRIV_MSG % (priv['date'], priv['sender'], priv['target'], priv['msg'])
 
     mail.send_mail(email, email, subject, body)
     logging.debug(body)
-
-class XMPPHandler(webapp.RequestHandler):
-    def post(self):
-        logging.debug("<-------------- XMPPHandler --------------->")
-        message = xmpp.Message(self.request.POST)
-        logging.debug("sender: %s, to: %s, body: %s" % (message.sender, message.to, message.body))
-        currentUser = CurrentUsers.all().filter("xmpp = ", db.IM("xmpp", message.sender)).get()
-        if currentUser is None:
-            logging.debug("adding new user in xmpp handler")
-            # Add to list of current users
-            currentUser = CurrentUsers()
-            currentUser.xmpp = db.IM("xmpp", message.sender)
-            email = re.sub(r'(.*)\/.*', r'\1', message.sender)
-            currentUser.user = users.User(email)
-            try:
-                currentUser.put()
-            except CapabilityDisabledError:
-                logging.warn("datastore maintenance")
-                message.reply(MAINTENANCE_MSG)
-                return 
-
-            # Create new login message
-            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-            msg = getNickname(currentUser.user) + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + " from Google Talk. Irasshaimase biatch!"
-            chatMsg = ChatMsg.createXmppMsg(message.sender, msg, "chat.getUsers", isAnon=True)
-
-            # Send recent chats to the XMPP user
-            recentChats = ChatMsg.all().order("-date").fetch(20)
-            recentChats.reverse()
-
-            reply = "\n"
-            #chats = [to_dict(chat) for chat in recentChats]
-            for chat in recentChats:
-                reply += XMPPHandler.parseChatMsg(chat)
-            message.reply(reply)
-
-        # Replace URLs with html code
-        msg = re.sub(HTML_REGEX,
-                     r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
-                     message.body)
-        ChatMsg.createXmppMsg(message.sender, msg)
-
-    @staticmethod
-    def parseChatMsg(chat):
-        date = re.sub(r'(.*)\.\d+', r'\1', str(chat.date))
-        user = getNickname(chat.user)
-        msg = re.sub(r'<.*?>', r'', chat.msg)
-        return XMPP_MSG % (date, user, msg)

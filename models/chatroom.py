@@ -9,6 +9,9 @@ from google.appengine.ext.db import Key
 import datetime
 import time
 
+#from utils import getNickname
+import utils
+
 SIMPLE_TYPES = (int, long, float, bool, dict, basestring, list)
 
 def to_dict(model):
@@ -32,7 +35,9 @@ def to_dict(model):
         elif isinstance(value, db.Model):
             output[key] = to_dict(value)
         elif isinstance(value, users.User):
-            output[key] = value.nickname()
+            output[key] = utils.getNickname(value)
+        elif isinstance(value, db.IM):
+            output[key] = ''
         else:
             raise ValueError('cannot encode ' + repr(prop))
 

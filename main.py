@@ -37,7 +37,7 @@ from utils import getNickname
 ### Model classes
 from models.chatroom import * 
 ### Handlers
-from handlers import rpc, chatroom
+from handlers import rpc, chatroom, XMPPInterface
 
 ### Request handlers
 
@@ -92,6 +92,7 @@ def main():
         'chat.getUsers': chatroom.getUsers,
         'chat.updateUserPrefs': chatroom.updateUserPrefs,
         'chat.execCommand': chatroom.execCommand,
+        'chat.loadChatMessages': chatroom.loadChatMessages,
         'chat.loadPrivateMessages': chatroom.loadPrivateMessages,
         'chat.emailLog': chatroom.emailLog,
     }
@@ -104,7 +105,7 @@ def main():
         ('/chat', MainPage),
         ('/login', LoginPage),
         ('/rpc', rpc.RPCHandler),
-        ('/_ah/xmpp/message/chat/', chatroom.XMPPHandler)
+        ('/_ah/xmpp/message/chat/', XMPPInterface.XMPPHandler)
         ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
