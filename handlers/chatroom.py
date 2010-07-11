@@ -1,7 +1,6 @@
 import datetime
 from datetime import timedelta
 
-import os
 import re
 
 import logging
@@ -30,12 +29,7 @@ from constants import *
 from utils import getNickname
 
 HISTORYSIZE = 1000
-HTML_REGEX = r'(https?:\/\/[0-9A-Za-z_,.:;&=+*%$#!?@()~\'\/-]+)'
-XMPP_CHAT_MSG = "%s, %s: %s\n"
-MAINTENANCE_MSG = "Sorry, Google's database is currently undergoing maintenance."
-WELCOME_MSG = """Welcome to Haabaato's chatroom!
-Here's the most recent messages...
-"""
+
 CHAT_MSG = "%s %s: %s\n"
 PRIV_MSG = "%s %s -> %s: %s\n"
 
@@ -181,10 +175,6 @@ def saveMessage(msg, latestChatID):
 
     #return loadMessages(latestChatID, latestPrivMsgID)
     return loadChatMessages(latestChatID)
-
-#class UserObj():
-#    pass
-
 
 def getUsers():
     logging.debug("<-------------- getUsers --------------->")
