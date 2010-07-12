@@ -4,6 +4,7 @@ from google.appengine.api import users
 from models.chatroom import * 
 
 # Helper method that retrieves current user's nickname
+# Input: currentUser - User object
 def getNickname(currentUser=None):
     if currentUser is None:
         currentUser = users.get_current_user()
@@ -19,4 +20,20 @@ def getNickname(currentUser=None):
         nickname = "Unknown"
 
     return nickname
+
+# Helper method that retrieves User object given nickname
+# Input: userName - string
+def findUser(userName):
+    userPrefs = UserPrefs.all().filter("nickname = ", userName).get()
+    if userPrefs:
+        return userPrefs.user
+    else:
+        # Otherwise userName is the default email
+        currentUsers = CurrentUsers.all().fetch(1000)
+        for currentUser in currentUsers:
+            if currentUser.user and currentUser.user.nickname() == userName:
+                return currentUser.user
+
+    # If User object is not found, return nothing
+    return None 
 

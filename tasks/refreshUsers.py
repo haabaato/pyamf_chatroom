@@ -11,6 +11,12 @@ from models.chatroom import *
 
 from constants import *
 
+TIMEOUT_MSG = """%s logged out at %s (timed out). Later hater!"""
+XMPP_TIMEOUT_MSG = """You have been logged out for being idle for more than 30 minutes.
+To rejoin the chatroom, type anything and press enter.
+"""
+
+
 class RefreshUsersTask(webapp.RequestHandler):
     def get(self):
         self.response.headers['Content-Type'] = 'text/html'
@@ -44,16 +50,24 @@ class RefreshUsersTask(webapp.RequestHandler):
 
             logging.info("deleting user " + nickname)
 
-            msg = nickname + " logged out at " + localtime.strftime("%H:%M, %a, %b %d %Y") + ' (timed out). Later hater!'
+            msg = TIMEOUT_MSG % (nickname, localtime.strftime("%H:%M, %a, %b %d %Y"))
             chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
             currentUser.delete()
 
         xmppUsers = CurrentUsers.all().filter("xmpp != ", None)
-        for user in xmppUsers:
-            if not xmpp.get_presence(user.xmpp):
-                logging.info("deleting XMPP user " + user.user.nickname())
-                user.delete()
+        for xmppUser in xmppUsers:
+            past = now - timedelta(minutes=30)
+            if not xmpp.get_presence(xmppUser.user.email()):
+                logging.info("deleting XMPP user " + xmppUser.user.nickname())
+                xmppUser.delete()
+            elif xmppUser.date < past:
+                xmpp.send_message(xmppUser.xmpp, XMPP_TIMEOUT_MSG) 
+                xmppUser.delete()
+                msg = TIMEOUT_MSG % (nickname, localtime.strftime("%H:%M, %a, %b %d %Y"))
+                chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
+
+                
 
         logging.info("Users who didn't ping since %s were deleted." % past)
 

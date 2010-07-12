@@ -1,5 +1,7 @@
 import logging
 
+import re
+
 from google.appengine.api import memcache
 from google.appengine.ext import db
 from google.appengine.api import users
@@ -80,7 +82,9 @@ class ChatMsg(db.Model):
         if isAnon:
             chatMsg.user = users.User(' ')
         else:
-            chatMsg.user = users.User(sender)
+            formattedSender = re.sub(r'(.*)/.*', r'\1', sender)
+            logging.debug(sender + " " + formattedSender) 
+            chatMsg.user = users.User(formattedSender)
         chatMsg.msg = msg
 
         # If callback is set, Flash app will issue RPC to service named by callback
@@ -190,3 +194,24 @@ class PrivMsg(db.Model):
 
         return privMsg
 
+    @classmethod
+    def createXmppMsg(self, sender, target, msg):
+        privMsg = PrivMsg()
+        
+        formattedSender = re.sub(r'(.*)/.*', r'\1', sender)
+        logging.debug(sender + " " + formattedSender) 
+        privMsg.sender = users.User(formattedSender)
+        privMsg.target = target
+        privMsg.msg = msg
+
+        # Get the ID of the latest message
+        latestChat = PrivMsg.all().order("-id").get()
+        latestID = latestChat.id if latestChat else 0
+        privMsg.id = latestID + 1
+        try:
+            privMsg.put()    
+        except CapabilityDisabledError:
+            logging.warn("datastore maintenance")
+            pass
+
+        return privMsg

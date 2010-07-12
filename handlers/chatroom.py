@@ -28,7 +28,7 @@ from handlers.XMPPInterface import *
 from constants import *
 from utils import getNickname
 
-HISTORYSIZE = 1000
+HISTORYSIZE = 250
 
 CHAT_MSG = "%s %s: %s\n"
 PRIV_MSG = "%s %s -> %s: %s\n"
@@ -47,6 +47,7 @@ def loadMessages(latestChatID = 0, latestPrivMsgID = 0):
 
 def loadChatMessages(latestMsgID = 0):
     logging.debug("<--------------- loadChatMessages -------------->")
+    logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + getNickname())
 
     # Check if commands need to be executed
     result = checkCommandQueue()
@@ -55,29 +56,61 @@ def loadChatMessages(latestMsgID = 0):
         logging.debug(result)
         return result
 
+#    if latestMsgID == 0:
+#        # User has just logged in, so send them all the chats
+#        recentChats = memcache.get("recentChats")
+#        # Query db for most recent messages and store in memcache
+#        if recentChats is None:
+#            recentChats = ChatMsg.all().order("-date").fetch(HISTORYSIZE)
+#            if len(recentChats) == 0:
+#                chats = recentChats = []
+#            else:
+#                recentChats.reverse()
+#                memcache.add("recentChats", recentChats, 60*60) 
+#        # Check that recentChats is not empty
+#        if len(recentChats):
+#            latestMsgID = recentChats[-1].id
+#            newChats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+#            recentChats.extend(newChats)
+#            chats = recentChats
+#    else:
+#        # Only return the most recent chats
+#        chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+
+    recentChats = memcache.get("recentChats")
+    # Query db for most recent messages and store in memcache
+    if recentChats is None:
+        recentChats = ChatMsg.all().order("id").fetch(HISTORYSIZE)
+        if len(recentChats) == 0:
+            recentChats = []
+        else:
+            memcache.add("recentChats", recentChats, 60*60*24) 
+
     if latestMsgID == 0:
         # User has just logged in, so send them all the chats
-        recentChats = memcache.get("recentChats")
-        # Query db for most recent messages and store in memcache
-        if recentChats is None:
-            recentChats = ChatMsg.all().order("-date").fetch(HISTORYSIZE)
-            if len(recentChats) == 0:
-                chats = recentChats = []
-            else:
-                recentChats.reverse()
-                memcache.add("recentChats", recentChats, 60*60) 
+        chats = recentChats
+    else:
         # Check that recentChats is not empty
         if len(recentChats):
-            latestMsgID = recentChats[-1].id
-            newChats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+            # Update recentChats in memcache
+            recentID = recentChats[-1].id
+            newChats = ChatMsg.all().order("id").filter("id > ", recentID).fetch(HISTORYSIZE)
             recentChats.extend(newChats)
-            chats = recentChats
-    else:
+            memcache.replace("recentChats", recentChats, 60*60*24) 
         # Only return the most recent chats
         chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
+
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
+
+    logging.debug("recentChats")
+    for a in recentChats:
+        logging.debug("id=%d, msg=%s", a.id, a.msg)
+    logging.debug("chats")
+    for b in chats:
+        logging.debug("id=%d, msg=%s", b['id'], b['msg'])
+
 
     #stats = memcache.get_stats()
     #logging.debug("Cache hits: " + str(stats['hits']))
@@ -94,48 +127,76 @@ def loadPrivateMessages(latestMsgID = 0):
         return
     logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + user.nickname())
     memcachekey = "recentPrivChats" + user.nickname()
+
+#    if latestMsgID == 0:
+#        # User has just logged in, so send them all the chats
+#        recentPrivChats = memcache.get(memcachekey)
+#        # Query db for most recent messages and store in memcache
+#        if recentPrivChats is None:
+#            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
+#            recentPrivChats = []
+#            if len(allPrivMsgs) != 0:
+#                # Remove messages that aren't from or to this user
+#                for chat in allPrivMsgs:
+#                    if chat.sender == user or chat.target == user:
+#                        recentPrivChats.append(chat)
+#
+#                memcache.add(memcachekey, recentPrivChats, 60*60) 
+#        # Check that recentPrivChats is not empty
+#        if len(recentPrivChats):
+#            latestMsgID = recentPrivChats[-1].id
+#            allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+#        else:
+#            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
+#        # Remove messages that aren't from or to this user
+#        for chat in allPrivMsgs:
+#            if chat.sender == user or chat.target == user:
+#                recentPrivChats.append(chat)
+#
+#        chats = recentPrivChats
+#    else:
+#        # Only return the most recent chats
+#        allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+#        # Remove messages that aren't from or to this user
+#        for chat in allPrivMsgs:
+#            if chat.sender == user or chat.target == user:
+#                chats.append(chat)
+
+    recentPrivChats = memcache.get(memcachekey)
+    # Query db for most recent messages and store in memcache
+    if recentPrivChats is None:
+        allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
+        recentPrivChats = []
+        if len(allPrivMsgs) != 0:
+            # Remove messages that aren't from or to this user
+            for chat in allPrivMsgs:
+                if chat.sender == user or chat.target == user:
+                    recentPrivChats.append(chat)
+
+            memcache.add(memcachekey, recentPrivChats, 60*60*24) 
+
     if latestMsgID == 0:
         # User has just logged in, so send them all the chats
-        recentPrivChats = memcache.get(memcachekey)
-        # Query db for most recent messages and store in memcache
-        if recentPrivChats is None:
-            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
-            recentPrivChats = []
-            if len(allPrivMsgs) != 0:
-                # Remove messages that aren't from or to this user
-                for chat in allPrivMsgs:
-                    if chat.sender == user or chat.target == user:
-                        recentPrivChats.append(chat)
-
-                memcache.add(memcachekey, recentPrivChats, 60*60) 
+        chats = recentPrivChats
+    else:
+        # Update recentPrivChats in memcache
         # Check that recentPrivChats is not empty
         if len(recentPrivChats):
-            latestMsgID = recentPrivChats[-1].id
-            allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+            recentID = recentPrivChats[-1].id
+            newPrivMsgs = PrivMsg.all().order("id").filter("id > ", recentID).fetch(HISTORYSIZE)
         else:
-            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
-        # Remove messages that aren't from or to this user
-        for chat in allPrivMsgs:
+            newPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
+        for chat in newPrivMsgs:
             if chat.sender == user or chat.target == user:
                 recentPrivChats.append(chat)
 
-        chats = recentPrivChats
-    else:
+        memcache.replace(memcachekey, recentPrivChats, 60*60*24) 
         # Only return the most recent chats
-        allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
-        # Remove messages that aren't from or to this user
-        for chat in allPrivMsgs:
-            if chat.sender == user or chat.target == user:
-                chats.append(chat)
-
-    # Add the db id to each object
-    #for chat in chats:
-    #    chat.id = chat.key().id()
+        chats = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
 
-    #logging.info("# privates: " + str(len(chats)))
     return chats
 
 
@@ -219,9 +280,10 @@ def getUsers():
             email = "Hidden"
         userObj['email'] = email
 
+        if currentUser.user == users.get_current_user():
+            userObj['isMe'] = True
+
         userObjList.append(userObj)
-        #if currentUser.user == users.get_current_user():
-        #    currentUser.isMe = True
 
     logging.debug(validUserList)
     #return [currentUser.user.nickname() for currentUser in userList if currentUser is not None]
@@ -243,7 +305,7 @@ def updateUserPrefs(prefs):
 
     # Create a new message
     if prefs.nickname:
-       msg = getNickname() + ' has changed nickname to: "' + prefs.nickname + '"'
+       msg = NICK_MSG % (getNickname(), prefs.nickname)
        ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
     # Add the user preferences dynamically
@@ -327,7 +389,16 @@ def kickUser(userName, message):
     return 
 
 def sendPrivateMessage(userName, message):
-    PrivMsg.createMsg(findUser(userName), message)
+    user = findUser(userName)
+    privMsg = PrivMsg.createMsg(user, message)
+    # Send this message to XMPP client if necessary
+    target = CurrentUsers.all().filter("user = ", user).get()
+    if target is None:
+        return "The user '%s' does not exist. (Maybe they changed their nickname?)" % userName
+    if target.xmpp:
+        #xmppUsers = [xmppUser.user.email() for xmppUser in xmppUsers]
+        xmpp.send_message(target.user.email(), XMPPHandler.parsePrivMsg(privMsg)) 
+
     return loadPrivateMessages
     
 def emote(userName, message):
@@ -363,7 +434,7 @@ def emailLog():
         # Only allow email requests after a 30 min waiting period
         past = now - timedelta(minutes=30)
         logging.debug("past=" + str(past) + " lastReq=" + str(userPrefs.lastEmailRequest))
-        if userPrefs.lastEmailReques and tuserPrefs.lastEmailRequest > past:
+        if userPrefs.lastEmailRequest and userPrefs.lastEmailRequest > past:
             return "Sorry, you can only request an email once every 30 minutes."
     else:
         userPrefs = UserPrefs()
@@ -377,8 +448,12 @@ def emailLog():
 
     subject = "Chat logs for %s" % datetime.datetime.now()
 
+    yest = datetime.datetime.now() - timedelta(days=1)
+    recentMsgId = PrivMsg.all().order("id").filter("date >= ", yest).get()
+    recentPrivId = PrivMsg.all().order("id").filter("date >= ", yest).get()
+    logging.debug("recentMsg=%d, recentPriv=%d" % (recentMsgId, recentPrivId))
     # Load all chat messages and private messages
-    [chats, privates] = loadMessages(0, 0)
+    [chats, privates] = loadMessages(recentMsgId, recentPrivId)
 
     body = "------------------------------ Chat Messages ------------------------------\n\n"
     

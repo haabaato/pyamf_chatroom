@@ -80,7 +80,8 @@ class LoginPage(webapp.RequestHandler):
         
         self.response.out.write("<a href=" + url + ">" + url_linktext + "</a>")
 
-def main():
+#def main():
+def real_main():
     debug_enabled = True
     LOG_FILENAME = 'logging_example.out'
     logging.basicConfig(filename=LOG_FILENAME, filemode="w", level=logging.DEBUG)
@@ -112,6 +113,24 @@ def main():
     #run_wsgi_app(application)
     run_wsgi_app(FirePythonWSGI(application))
 
+def profile_main():
+    # This is the main function for profiling
+    # We've renamed our original main() above to real_main()
+    import cProfile, pstats, StringIO
+    prof = cProfile.Profile()
+    prof = prof.runctx("real_main()", globals(), locals())
+    stream = StringIO.StringIO()
+    stats = pstats.Stats(prof, stream=stream)
+    stats.sort_stats("time")  # Or cumulative
+    stats.print_stats(80)  # 80 = how many to print
+    # The rest is optional.
+    # stats.print_callees()
+    # stats.print_callers()
+    logging.info("Profile data:\n%s", stream.getvalue())
+
+def main():
+    real_main()
+    #profile_main()
 
 if __name__ == '__main__':
   main()

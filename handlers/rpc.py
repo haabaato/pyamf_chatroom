@@ -14,6 +14,7 @@ from models.chatroom import *
 from constants import *
 from utils import getNickname
 
+
 ### RPC methods
 
 class RPCHandler(webapp.RequestHandler):
@@ -77,7 +78,7 @@ class RPCMethods:
             # Show logout msg if user was deleted 
             if result:
                 localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-                msg = getNickname() + " logged out at " + localtime.strftime("%H:%M, %a %b, %d, %Y") + '. Later hater!'
+                msg = LOGOUT_MSG % (getNickname(), localtime.strftime("%H:%M, %a %b, %d, %Y"))
                 # Create logout message
                 ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
