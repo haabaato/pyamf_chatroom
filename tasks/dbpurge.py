@@ -15,8 +15,11 @@ class DbPurgeTask(webapp.RequestHandler):
         q = db.GqlQuery("SELECT * FROM ChatMsg WHERE date < :1", pastDay)
         results = q.fetch(500)
         db.delete(results)
+        q = db.GqlQuery("SELECT * FROM PrivMsg WHERE date < :1", pastDay)
+        results = q.fetch(500)
+        db.delete(results)
         # clear memcache as well
-        memcache.delete("recentChats")
+        memcache.flush_all()
 
         self.response.headers['Content-Type'] = 'text/html'
 
@@ -24,10 +27,19 @@ class DbPurgeTask(webapp.RequestHandler):
 
 class DbPurgeAllTask(webapp.RequestHandler):
     def get(self):
-        results = ChatMsg.all().fetch(500)
-        db.delete(results)
+        while True:
+            results = ChatMsg.all().fetch(100)
+            if len(results) == 0:
+                break
+            db.delete(results)
+        while True:
+            results = PrivMsg.all().fetch(100)
+            if len(results) == 0:
+                break
+            db.delete(results)
+
         # clear memcache as well
-        memcache.delete("recentChats")
+        memcache.flush_all()
 
         self.response.headers['Content-Type'] = 'text/html'
         self.response.out.write("Deleted all messages.")

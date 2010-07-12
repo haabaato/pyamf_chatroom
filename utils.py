@@ -2,6 +2,7 @@ from google.appengine.ext import db
 from google.appengine.api import users
 ### Model classes
 from models.chatroom import * 
+from models.chatroom import UserPrefs 
 
 # Helper method that retrieves current user's nickname
 # Input: currentUser - User object

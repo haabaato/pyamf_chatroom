@@ -21,10 +21,10 @@ Here's the most recent messages...
 """
 HELP_MSG = """To start chatting, type anything and press enter.  To send private messages to someone in the chatroom, type /msg "nickname" "your message" without the quotes.  To see the list of user nicknames, type /users.
 
-/emote <message> - Sends message in the third person. 
-    Ex: If your nick is haabaato, and your message is "is so cool", then the resulting text will be: "haabaato is so cool"
 /help - This help message.
 /logout - Logs out of this chatroom
+/me <message> - Sends message in the third person. 
+    Ex: If your nick is haabaato, and your message is "is so cool", then the resulting text will be: "haabaato is so cool"
 /msg <nickname> <message> - Sends a private message to the person specified by nickname
 /nick <nickname> - Change your nickname by typing /nick newname
 /topic <message> - Change the topic of the chatroom to your custom message
@@ -59,11 +59,15 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
                 return
             # Add to list of current users
 
-            currentUser = CurrentUsers()
-            currentUser.xmpp = db.IM("xmpp", message.sender)
             email = re.sub(r'(.*)\/.*', r'\1', message.sender)
-            currentUser.user = users.User(email)
+            # See if this user already exists. If does exist, write to the xmpp property only
+            currentUser = CurrentUsers.all().filter("user = ", users.User(email)).get()
+            if currentUser is None:
+                currentUser = CurrentUsers()
+                currentUser.user = users.User(email)
+
             try:
+                currentUser.xmpp = db.IM("xmpp", message.sender)
                 currentUser.put()
             except CapabilityDisabledError:
                 logging.warn("datastore maintenance")
@@ -80,7 +84,6 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
             recentChats.reverse()
 
             reply = WELCOME_MSG + "\n"
-            #chats = [to_dict(chat) for chat in recentChats]
             for chat in recentChats:
                 reply += XMPPHandler.parseChatMsg(chat)
             message.reply(reply)
@@ -99,36 +102,7 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
 
 
     def text_message(self, message=None):
-        #message = xmpp.Message(self.request.POST)
         currentUser = CurrentUsers.all().filter("xmpp = ", db.IM("xmpp", message.sender)).get()
-#        if currentUser is None:
-#            logging.debug("adding new user in xmpp handler")
-#            # Add to list of current users
-#            currentUser = CurrentUsers()
-#            currentUser.xmpp = db.IM("xmpp", message.sender)
-#            email = re.sub(r'(.*)\/.*', r'\1', message.sender)
-#            currentUser.user = users.User(email)
-#            try:
-#                currentUser.put()
-#            except CapabilityDisabledError:
-#                logging.warn("datastore maintenance")
-#                message.reply(MAINTENANCE_MSG)
-#                return 
-#
-#            # Create new login message
-#            localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-#            msg = getNickname(currentUser.user) + " logged in at " + localtime.strftime("%H:%M on %a, %b %d %Y") + " from Google Talk. Irasshaimase biatch!"
-#            chatMsg = ChatMsg.createXmppMsg(message.sender, msg, "chat.getUsers", isAnon=True)
-#
-#            # Send recent chats to the XMPP user
-#            recentChats = ChatMsg.all().order("-date").fetch(20)
-#            recentChats.reverse()
-#
-#            reply = WELCOME_MSG + "\n"
-#            #chats = [to_dict(chat) for chat in recentChats]
-#            for chat in recentChats:
-#                reply += XMPPHandler.parseChatMsg(chat)
-#            message.reply(reply)
 
         # Replace URLs with html code
         msg = re.sub(HTML_REGEX,
@@ -141,7 +115,12 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
         # Show unnknown cmd text
         message.reply(UNHANDLED_MSG % message.command)
 
-    def emote_command(self, message=None):
+    def me_command(self, message=None):
+        currentUser = CurrentUsers.all().filter("xmpp = ", db.IM("xmpp", message.sender)).get()
+        cmd, msg = message.body.split(' ', 1)
+        msg = "<i>" + getNickname(currentUser.user) + " " + msg + "</i>"   
+        ChatMsg.createXmppMsg(message.sender, msg)
+
         pass
 
 
@@ -187,7 +166,7 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
         logging.debug("logout_command")
         currentUser = CurrentUsers.all().filter("xmpp = ", db.IM("xmpp", message.sender)).get()
         localtime = datetime.datetime.now() + timedelta(hours=UTC_OFFSET)
-        msg = LOGOUT_MSG % (getNickname(currentUser), localtime.strftime("%H:%M, %a %b, %d, %Y"))
+        msg = LOGOUT_MSG % (getNickname(currentUser.user), localtime.strftime("%H:%M, %a %b, %d, %Y"))
         # Create logout message
         ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
         message.reply(XMPP_LOGOUT_MSG)

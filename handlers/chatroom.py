@@ -10,25 +10,24 @@ from google.appengine.ext.webapp.util import run_wsgi_app
 from google.appengine.api import users
 from google.appengine.ext import db
 from google.appengine.api import memcache
-from google.appengine.ext.webapp import template
+#from google.appengine.ext.webapp import template
 from google.appengine.ext.db import Key
 from google.appengine.api.datastore import Get, Put
 from google.appengine.api import mail
 from google.appengine.api import xmpp
 from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
 
-
-from django.utils import simplejson
+#from django.utils import simplejson
 
 ### Model classes
 from models.chatroom import * 
-from handlers.XMPPInterface import *
+from handlers.XMPPInterface import XMPPHandler
 
 # Import constants and helper methods
 from constants import *
 from utils import getNickname
 
-HISTORYSIZE = 250
+HISTORYSIZE = 50
 
 CHAT_MSG = "%s %s: %s\n"
 PRIV_MSG = "%s %s -> %s: %s\n"
@@ -47,7 +46,8 @@ def loadMessages(latestChatID = 0, latestPrivMsgID = 0):
 
 def loadChatMessages(latestMsgID = 0):
     logging.debug("<--------------- loadChatMessages -------------->")
-    logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + getNickname())
+    logging.info("latestMsgID = " + str(latestMsgID))
+    #logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + getNickname())
 
     # Check if commands need to be executed
     result = checkCommandQueue()
@@ -94,22 +94,24 @@ def loadChatMessages(latestMsgID = 0):
         if len(recentChats):
             # Update recentChats in memcache
             recentID = recentChats[-1].id
-            newChats = ChatMsg.all().order("id").filter("id > ", recentID).fetch(HISTORYSIZE)
-            recentChats.extend(newChats)
-            memcache.replace("recentChats", recentChats, 60*60*24) 
+            chats = ChatMsg.all().order("id").filter("id > ", recentID).fetch(HISTORYSIZE)
+        else:
+            chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+        recentChats.extend(chats)
+        memcache.replace("recentChats", recentChats, 60*60*24) 
         # Only return the most recent chats
-        chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+        #chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
 
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
 
-    logging.debug("recentChats")
-    for a in recentChats:
-        logging.debug("id=%d, msg=%s", a.id, a.msg)
-    logging.debug("chats")
-    for b in chats:
-        logging.debug("id=%d, msg=%s", b['id'], b['msg'])
+#    logging.debug("recentChats")
+#    for a in recentChats:
+#        logging.debug("id=%d, msg=%s", a.id, a.msg)
+#    logging.debug("chats")
+#    for b in chats:
+#        logging.debug("id=%d, msg=%s", b['id'], b['msg'])
 
 
     #stats = memcache.get_stats()
@@ -121,12 +123,12 @@ def loadChatMessages(latestMsgID = 0):
 def loadPrivateMessages(latestMsgID = 0):
     logging.debug("<--------------- loadPrivateMessages -------------->")
 
-    chats = []
     user = users.get_current_user()
     if user is None:
         return
     logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + user.nickname())
     memcachekey = "recentPrivChats" + user.nickname()
+    chats = []
 
 #    if latestMsgID == 0:
 #        # User has just logged in, so send them all the chats
@@ -188,11 +190,13 @@ def loadPrivateMessages(latestMsgID = 0):
             newPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
         for chat in newPrivMsgs:
             if chat.sender == user or chat.target == user:
-                recentPrivChats.append(chat)
+                chats.append(chat)
+                #recentPrivChats.append(chat)
+        recentPrivChats.extend(chats)
 
         memcache.replace(memcachekey, recentPrivChats, 60*60*24) 
         # Only return the most recent chats
-        chats = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
+        #chats = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
@@ -226,13 +230,7 @@ def saveMessage(msg, latestChatID):
                  r'<a href="\1" target="_BLANK"><font color="#0000ff">\1</font></a>',
                  msg)
     chat = ChatMsg.createMsg(msg, callback)
-
-    # Send this message to all XMPP clients
-    xmppUsers = CurrentUsers.all().filter("xmpp != ", None).fetch(1000)
-    logging.info("xmppUsers = " + str(len(xmppUsers)))
-    if len(xmppUsers) > 0:
-        xmppUsers = [xmppUser.user.email() for xmppUser in xmppUsers]
-        xmpp.send_message(xmppUsers, XMPPHandler.parseChatMsg(chat)) 
+    sendToXmpp(chat)
 
     #return loadMessages(latestChatID, latestPrivMsgID)
     return loadChatMessages(latestChatID)
@@ -305,8 +303,9 @@ def updateUserPrefs(prefs):
 
     # Create a new message
     if prefs.nickname:
-       msg = NICK_MSG % (getNickname(), prefs.nickname)
-       ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
+        msg = NICK_MSG % (getNickname(), prefs.nickname)
+        chat = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
+        sendToXmpp(chat) 
 
     # Add the user preferences dynamically
     objEntity = Get(userPrefs.key())
@@ -413,7 +412,8 @@ def setTopic(userName, message):
         chat.callback = None 
         chat.put()
     msg = '%s has changed the topic to: "%s"' % (getNickname(), message)
-    ChatMsg.createMsg(msg, callback, isAnon=True)
+    chat = ChatMsg.createMsg(msg, callback, isAnon=True)
+    sendToXmpp(chat)
 
 slashCommands = {
     'kick' : kickUser,
@@ -448,12 +448,27 @@ def emailLog():
 
     subject = "Chat logs for %s" % datetime.datetime.now()
 
-    yest = datetime.datetime.now() - timedelta(days=1)
-    recentMsgId = PrivMsg.all().order("id").filter("date >= ", yest).get()
-    recentPrivId = PrivMsg.all().order("id").filter("date >= ", yest).get()
-    logging.debug("recentMsg=%d, recentPriv=%d" % (recentMsgId, recentPrivId))
+#    yest = datetime.datetime.now() - timedelta(days=1)
+#    logging.debug("yest=%s, now=%s" % (yest, datetime.datetime.now()))
+#    recentMsg = ChatMsg.all().order("date").filter("date >= ", yest).get()
+#    recentPriv = PrivMsg.all().order("date").filter("date >= ", yest).get()
+#    if recentMsg is None:
+#        chats = [] 
+#    else:
+#        chats = loadChatMessages(recentMsg.id)
+#    logging.debug(chats)
+#    if recentPriv is None:
+#        privates = [] 
+#    else:
+#        privates = loadPrivateMessages(recentPriv.id)
+#    logging.debug(privates)
+
+    [chats, privates] = loadMessages(0, 0)
+    logging.debug(chats)
+    logging.debug(privates)
+
+
     # Load all chat messages and private messages
-    [chats, privates] = loadMessages(recentMsgId, recentPrivId)
 
     body = "------------------------------ Chat Messages ------------------------------\n\n"
     
@@ -467,3 +482,11 @@ def emailLog():
 
     mail.send_mail(email, email, subject, body)
     logging.debug(body)
+
+def sendToXmpp(chat):
+    # Send this message to all xmpp users
+    xmppUsers = CurrentUsers.all().filter("xmpp != ", None).fetch(1000)
+    if len(xmppUsers) > 0:
+       xmppUsers = [xmppUser.user.email() for xmppUser in xmppUsers]
+       xmpp.send_message(xmppUsers, XMPPHandler.parseChatMsg(chat)) 
+
