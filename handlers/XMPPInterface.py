@@ -53,7 +53,7 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
             logging.debug("adding new user in xmpp handler")
 
             # Prevent too many users from logging in
-            xmppUsers = CurrentUsers.all().filter("xmpp != ", None).fetch(USER_LIMIT)
+            xmppUsers = CurrentUsers.all().filter("xmpp > ", None).fetch(USER_LIMIT)
             if len(xmppUsers) == USER_LIMIT:
                 message.reply(USER_LIMIT_MSG)
                 return
@@ -170,7 +170,10 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
         # Create logout message
         ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
         message.reply(XMPP_LOGOUT_MSG)
-        currentUser.delete()
+        #currentUser.delete()
+        # Delete the XMPP property only and let cron task delete the user
+        currentUser.xmpp = None
+        currentUser.put()
 
     def msg_command(self, message=None):
         logging.debug("msg_command")
@@ -211,13 +214,6 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
         user = getNickname(chat.user)
         # Remove HTML tags from the message
         msg = re.sub(r'<.*?>', r'', chat.msg)
-        # Emphasize messages to user
-#        idx = msg.find(':')
-#        if idx != -1:
-#            userName = msg[0:idx - 1]
-#            user = findUser(userName)
-#            if :
-#                msg.replace(userName, "*%s*" % userName, 1)
         return XMPP_CHAT_MSG % (date, user, msg)
 
     # Input: chat - A PrivMsg object

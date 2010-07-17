@@ -62,6 +62,19 @@ class MainPage(webapp.RequestHandler):
                 # Create new login message
                 chatMsg = ChatMsg.createMsg(msg, "chat.getUsers", isAnon=True)
 
+                # Log the user's IP address
+                prefs = UserPrefs.all().filter("user = ", currentUser).get()
+                if prefs is None:
+                    prefs = UserPrefs()
+                    prefs.user = users.get_current_user()
+                prefs.ipAddr = self.request.remote_addr 
+                try:
+                    prefs.put()
+                except CapabilityDisabledError:
+                    logging.warn("datastore maintenance")
+                return MAINTENANCE_MSG
+
+
             template_values = {
                 }
 
@@ -110,8 +123,8 @@ def real_main():
         ]
     application = webapp.WSGIApplication(application_paths, debug=debug_enabled)
 
-    #run_wsgi_app(application)
-    run_wsgi_app(FirePythonWSGI(application))
+    run_wsgi_app(application)
+    #run_wsgi_app(FirePythonWSGI(application))
 
 def profile_main():
     # This is the main function for profiling

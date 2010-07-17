@@ -2,7 +2,6 @@ from google.appengine.ext import db
 from google.appengine.api import users
 ### Model classes
 from models.chatroom import * 
-from models.chatroom import UserPrefs 
 
 # Helper method that retrieves current user's nickname
 # Input: currentUser - User object
@@ -10,8 +9,13 @@ def getNickname(currentUser=None):
     if currentUser is None:
         currentUser = users.get_current_user()
 
+    email = currentUser.email()
+    nickname = memcache.get(email)
+    if nickname:
+        return nickname
     # Get user's preferences
     prefs = UserPrefs.all().filter("user = ", currentUser).get()
+
     # Set user's nickname
     if prefs and prefs.nickname:
         nickname = prefs.nickname
@@ -19,6 +23,8 @@ def getNickname(currentUser=None):
         nickname = currentUser.nickname()
     else:
         nickname = "Unknown"
+    # Store the user's nickname in memcache with email as key
+    memcache.add(email, nickname, 60*60*24)
 
     return nickname
 
