@@ -81,23 +81,11 @@ def loadChatMessages(latestMsgID = 0):
         chats = recentChats
 
     else:
-        # Check that recentChats is not empty
-#        if len(recentChats):
-#            logging.debug("updating memcache")
-#            # Update recentChats in memcache
-#            recentID = recentChats[-1].id
-#            # Only update if there's a significant amount of new messages
-#            latestMsg = ChatMsg.all().order("-id").get()
-#            if latestMsg and latestMsg.id - recentID > MEMCACHE_UPDATE_AMT:
-#                chats = ChatMsg.all().order("id").filter("id > ", recentID).fetch(HISTORYSIZE)
-#                recentChats.extend(chats)
-#                memcache.replace("recentChats", recentChats, 60*60*24) 
         # Only return the most recent chats
         chats = ChatMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
 
     # Convert each object into a JSON-serializable object
     chats = [to_dict(chat) for chat in chats]
-
 
     #stats = memcache.get_stats()
     #logging.debug("Cache hits: " + str(stats['hits']))
@@ -114,40 +102,6 @@ def loadPrivateMessages(latestMsgID = 0):
     logging.info("latestMsgID = " + str(latestMsgID)  + " for user:" + user.nickname())
     memcachekey = "recentPrivChats" + user.nickname()
     chats = []
-
-#    if latestMsgID == 0:
-#        # User has just logged in, so send them all the chats
-#        recentPrivChats = memcache.get(memcachekey)
-#        # Query db for most recent messages and store in memcache
-#        if recentPrivChats is None:
-#            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
-#            recentPrivChats = []
-#            if len(allPrivMsgs) != 0:
-#                # Remove messages that aren't from or to this user
-#                for chat in allPrivMsgs:
-#                    if chat.sender == user or chat.target == user:
-#                        recentPrivChats.append(chat)
-#
-#                memcache.add(memcachekey, recentPrivChats, 60*60) 
-#        # Check that recentPrivChats is not empty
-#        if len(recentPrivChats):
-#            latestMsgID = recentPrivChats[-1].id
-#            allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
-#        else:
-#            allPrivMsgs = PrivMsg.all().order("id").fetch(HISTORYSIZE)
-#        # Remove messages that aren't from or to this user
-#        for chat in allPrivMsgs:
-#            if chat.sender == user or chat.target == user:
-#                recentPrivChats.append(chat)
-#
-#        chats = recentPrivChats
-#    else:
-#        # Only return the most recent chats
-#        allPrivMsgs = PrivMsg.all().order("id").filter("id > ", latestMsgID).fetch(HISTORYSIZE)
-#        # Remove messages that aren't from or to this user
-#        for chat in allPrivMsgs:
-#            if chat.sender == user or chat.target == user:
-#                chats.append(chat)
 
     recentPrivChats = memcache.get(memcachekey)
     # Query db for most recent messages and store in memcache
@@ -245,20 +199,16 @@ def getUsers():
         prefs = UserPrefs.all().filter("user = ", currentUser.user).get()
         # Set user's nickname
         if prefs and prefs.nickname:
-            #currentUser.nickname = prefs.nickname 
             nickname = prefs.nickname 
         elif currentUser.user:
-            #currentUser.nickname = re.sub(r'^(.+)@.+$',
             nickname = re.sub(r'^(.+)@.+$',
                                           r'\1',
                                           currentUser.user.email())
         else:
-            #currentUser.nickname = ""
             nickname = ""
         userObj['nickname'] = nickname
 
         if prefs and prefs.isEmailVisible:
-            #currentUser.isEmailVisible = prefs.isEmailVisible 
             email = currentUser.user.email()
         else:
             email = "Hidden"
@@ -270,8 +220,6 @@ def getUsers():
         userObjList.append(userObj)
 
     logging.debug(validUserList)
-    #return [currentUser.user.nickname() for currentUser in userList if currentUser is not None]
-    #return validUserList
     return userObjList
 
 def updateUserPrefs(prefs):
@@ -442,25 +390,9 @@ def emailLog():
 
     subject = "Chat logs for %s" % datetime.datetime.now()
 
-#    yest = datetime.datetime.now() - timedelta(days=1)
-#    logging.debug("yest=%s, now=%s" % (yest, datetime.datetime.now()))
-#    recentMsg = ChatMsg.all().order("date").filter("date >= ", yest).get()
-#    recentPriv = PrivMsg.all().order("date").filter("date >= ", yest).get()
-#    if recentMsg is None:
-#        chats = [] 
-#    else:
-#        chats = loadChatMessages(recentMsg.id)
-#    logging.debug(chats)
-#    if recentPriv is None:
-#        privates = [] 
-#    else:
-#        privates = loadPrivateMessages(recentPriv.id)
-#    logging.debug(privates)
-
     [chats, privates] = loadMessages(0, 0)
-    logging.debug(chats)
-    logging.debug(privates)
-
+    #logging.debug(chats)
+    #logging.debug(privates)
 
     # Load all chat messages and private messages
 
@@ -475,7 +407,6 @@ def emailLog():
         body += PRIV_MSG % (priv['date'], priv['sender'], priv['target'], priv['msg'])
 
     mail.send_mail(email, email, subject, body)
-    logging.debug(body)
 
 def sendToXmpp(chat):
     # Send this message to all xmpp users (use '>' b/c 2x as faster than '!=')

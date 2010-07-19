@@ -41,7 +41,6 @@ USERS_MSG = "%d currently logged in users: "
 USER_LIMIT = 5
 USER_LIMIT_MSG = "Sorry, the maximum number of Google Talk users are logged in. Please try again later."
 
-#class XMPPHandler(webapp.RequestHandler):
 class XMPPHandler(xmpp_handlers.CommandHandler):
     def post(self):
         logging.debug("<-------------- XMPPHandler --------------->")
@@ -178,9 +177,6 @@ class XMPPHandler(xmpp_handlers.CommandHandler):
     def msg_command(self, message=None):
         logging.debug("msg_command")
         cmd, userName, msg = message.body.split(' ', 2)
-        #spaceIdx = message.body.find(' ')
-        #secondSpaceIdx = message.body[spaceIdx + 1].find(' ')
-        #userName = message.body[spaceIdx + 1 : secondSpaceIdx]
         user = findUser(userName)
         logging.debug("userName = %s, message= %s" % (userName, msg))
         if user is None:
