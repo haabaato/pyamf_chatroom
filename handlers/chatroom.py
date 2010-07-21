@@ -53,7 +53,7 @@ def loadChatMessages(latestMsgID = 0):
     result = checkCommandQueue()
     # Return early if a command has a return value
     if result:
-        logging.debug(result)
+        #logging.debug(result)
         return result
 
     recentChats = memcache.get("recentChats")
